@@ -16,20 +16,25 @@ public class UserService {
     }
 
     public User create(String fullName, String email, String phone, String department) {
-        if (fullName == null || fullName.isBlank()) {
+        String trimmedName = fullName != null ? fullName.trim() : "";
+        String trimmedEmail = email != null ? email.trim() : "";
+        String trimmedPhone = (phone != null && !phone.trim().isEmpty()) ? phone.trim() : null;
+        String trimmedDept = (department != null && !department.trim().isEmpty()) ? department.trim() : null;
+
+        if (trimmedName.isEmpty()) {
             throw new BusinessException("ФИО пользователя не может быть пустым.");
         }
-        if (email == null || email.isBlank()) {
+        if (trimmedEmail.isEmpty()) {
             throw new BusinessException("Email не может быть пустым.");
         }
-        if (!email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
-            throw new BusinessException("Некорректный формат email: " + email);
+        if (!trimmedEmail.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+            throw new BusinessException("Некорректный формат email: " + trimmedEmail);
         }
-        if (userRepository.existsByEmail(email)) {
-            throw new BusinessException("Пользователь с email '" + email + "' уже существует.");
+        if (userRepository.existsByEmail(trimmedEmail)) {
+            throw new BusinessException("Пользователь с email '" + trimmedEmail + "' уже существует.");
         }
 
-        User user = new User(fullName.trim(), email.trim(), phone, department);
+        User user = new User(trimmedName, trimmedEmail, trimmedPhone, trimmedDept);
         return userRepository.save(user);
     }
 
@@ -45,23 +50,28 @@ public class UserService {
     public void update(int id, String fullName, String email, String phone, String department) {
         User user = findById(id);
 
-        if (fullName == null || fullName.isBlank()) {
+        String trimmedName = fullName != null ? fullName.trim() : "";
+        String trimmedEmail = email != null ? email.trim() : "";
+        String trimmedPhone = (phone != null && !phone.trim().isEmpty()) ? phone.trim() : null;
+        String trimmedDept = (department != null && !department.trim().isEmpty()) ? department.trim() : null;
+
+        if (trimmedName.isEmpty()) {
             throw new BusinessException("ФИО пользователя не может быть пустым.");
         }
-        if (email == null || email.isBlank()) {
+        if (trimmedEmail.isEmpty()) {
             throw new BusinessException("Email не может быть пустым.");
         }
-        if (!email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
-            throw new BusinessException("Некорректный формат email: " + email);
+        if (!trimmedEmail.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+            throw new BusinessException("Некорректный формат email: " + trimmedEmail);
         }
-        if (userRepository.existsByEmailExcludingId(email, id)) {
-            throw new BusinessException("Email '" + email + "' уже используется другим пользователем.");
+        if (userRepository.existsByEmailExcludingId(trimmedEmail, id)) {
+            throw new BusinessException("Email '" + trimmedEmail + "' уже используется другим пользователем.");
         }
 
-        user.setFullName(fullName.trim());
-        user.setEmail(email.trim());
-        user.setPhone(phone);
-        user.setDepartment(department);
+        user.setFullName(trimmedName);
+        user.setEmail(trimmedEmail);
+        user.setPhone(trimmedPhone);
+        user.setDepartment(trimmedDept);
         userRepository.update(user);
     }
 
@@ -71,10 +81,11 @@ public class UserService {
     }
 
     public List<User> searchByName(String name) {
-        if (name == null || name.isBlank()) {
+        String trimmed = name != null ? name.trim() : "";
+        if (trimmed.isEmpty()) {
             throw new BusinessException("Строка поиска не может быть пустой.");
         }
-        return userRepository.searchByName(name);
+        return userRepository.searchByName(trimmed);
     }
 
     public int count() {

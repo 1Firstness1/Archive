@@ -13,6 +13,7 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import ru.mirea.archive.model.DocumentRequest;
 import ru.mirea.archive.model.User;
 
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -28,6 +29,11 @@ public class ExcelExporter {
 
     public static String exportToExcel(List<User> users, List<DocumentRequest> requests, String filePath)
             throws IOException {
+
+        File target = new File(filePath);
+        if (target.getParentFile() != null) {
+            target.getParentFile().mkdirs();
+        }
 
         try (Workbook workbook = new XSSFWorkbook()) {
 
@@ -66,7 +72,7 @@ public class ExcelExporter {
 
             Sheet reqSheet = workbook.createSheet("Запросы на документы");
             String[] reqHeaders = {"ID", "Пользователь", "Документ", "Описание", "Категория",
-                    "Статус", "Приоритет", "Создан", "Обновлён"};
+                    "Статус", "Приоритет", "Создан", "Обновлен"};
             Row reqHeaderRow = reqSheet.createRow(0);
             for (int i = 0; i < reqHeaders.length; i++) {
                 Cell cell = reqHeaderRow.createCell(i);
@@ -92,17 +98,48 @@ public class ExcelExporter {
                 reqSheet.autoSizeColumn(i);
             }
 
-            try (FileOutputStream fos = new FileOutputStream(filePath)) {
+            try (FileOutputStream fos = new FileOutputStream(target)) {
                 workbook.write(fos);
             }
         }
 
-        return filePath;
+        return target.getAbsolutePath();
     }
 
-    public static String exportToCsv(List<DocumentRequest> requests, String filePath) throws IOException {
+    public static String exportUsersToCsv(List<User> users, String filePath) throws IOException {
+        File target = new File(filePath);
+        if (target.getParentFile() != null) {
+            target.getParentFile().mkdirs();
+        }
+
         StringBuilder sb = new StringBuilder();
-        sb.append("ID;Пользователь;Документ;Описание;Категория;Статус;Приоритет;Создан;Обновлён\n");
+        sb.append("ID;ФИО;Email;Телефон;Отдел;Дата регистрации\n");
+
+        for (User u : users) {
+            sb.append(u.getId()).append(";");
+            sb.append(escapeCsv(u.getFullName())).append(";");
+            sb.append(escapeCsv(u.getEmail())).append(";");
+            sb.append(escapeCsv(u.getPhone() != null ? u.getPhone() : "")).append(";");
+            sb.append(escapeCsv(u.getDepartment() != null ? u.getDepartment() : "")).append(";");
+            sb.append(u.getCreatedAt() != null ? u.getCreatedAt().format(FMT) : "").append("\n");
+        }
+
+        try (FileOutputStream fos = new FileOutputStream(target)) {
+            fos.write(new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
+            fos.write(sb.toString().getBytes(StandardCharsets.UTF_8));
+        }
+
+        return target.getAbsolutePath();
+    }
+
+    public static String exportRequestsToCsv(List<DocumentRequest> requests, String filePath) throws IOException {
+        File target = new File(filePath);
+        if (target.getParentFile() != null) {
+            target.getParentFile().mkdirs();
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("ID;Пользователь;Документ;Описание;Категория;Статус;Приоритет;Создан;Обновлен\n");
 
         for (DocumentRequest r : requests) {
             sb.append(r.getId()).append(";");
@@ -116,11 +153,16 @@ public class ExcelExporter {
             sb.append(r.getUpdatedAt() != null ? r.getUpdatedAt().format(FMT) : "").append("\n");
         }
 
-        try (FileOutputStream fos = new FileOutputStream(filePath)) {
+        try (FileOutputStream fos = new FileOutputStream(target)) {
+            fos.write(new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
             fos.write(sb.toString().getBytes(StandardCharsets.UTF_8));
         }
 
-        return filePath;
+        return target.getAbsolutePath();
+    }
+
+    public static String exportToCsv(List<DocumentRequest> requests, String filePath) throws IOException {
+        return exportRequestsToCsv(requests, filePath);
     }
 
     private static String escapeCsv(String value) {

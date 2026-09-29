@@ -17,12 +17,25 @@ public enum Priority {
     }
 
     public static Priority fromString(String value) {
-        if (value == null) {
+        if (value == null || value.trim().isEmpty()) {
             throw new IllegalArgumentException("Приоритет не может быть пустым.");
         }
         String trimmed = value.trim();
+
+        try {
+            int num = Integer.parseInt(trimmed);
+            Priority[] all = values();
+            if (num >= 1 && num <= all.length) {
+                return all[num - 1];
+            }
+        } catch (NumberFormatException ignored) {
+        }
+
+        String normalized = trimmed.replace('ё', 'е').replace('Ё', 'Е');
         for (Priority p : values()) {
-            if (p.name().equalsIgnoreCase(trimmed) || p.displayName.equalsIgnoreCase(trimmed)) {
+            String normName = p.name().replace('ё', 'е').replace('Ё', 'Е');
+            String normDisplay = p.displayName.replace('ё', 'е').replace('Ё', 'Е');
+            if (normName.equalsIgnoreCase(normalized) || normDisplay.equalsIgnoreCase(normalized)) {
                 return p;
             }
         }

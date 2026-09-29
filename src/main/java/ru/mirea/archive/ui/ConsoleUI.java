@@ -11,8 +11,11 @@ import ru.mirea.archive.service.DocumentRequestService;
 import ru.mirea.archive.service.UserService;
 import ru.mirea.archive.util.ExcelExporter;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
@@ -24,9 +27,10 @@ public class ConsoleUI {
     private final UserService userService;
     private final DocumentRequestService requestService;
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+    private static final DateTimeFormatter FILE_TS_FMT = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
 
     public ConsoleUI(UserService userService, DocumentRequestService requestService) {
-        this.scanner = new Scanner(System.in);
+        this.scanner = new Scanner(System.in, StandardCharsets.UTF_8);
         this.userService = userService;
         this.requestService = requestService;
     }
@@ -137,21 +141,19 @@ public class ConsoleUI {
 
     private void createUser() {
         System.out.println("\n--- Добавление пользователя ---");
-        String fullName = readLine("ФИО: ");
-        String email = readLine("Email: ");
+        String fullName = readNonEmptyLine("ФИО: ", "ФИО не может быть пустым.");
+        String email = readNonEmptyLine("Email: ", "Email не может быть пустым.");
         String phone = readLine("Телефон (Enter — пропустить): ");
         String department = readLine("Отдел (Enter — пропустить): ");
 
-        User user = userService.create(fullName, email,
-                phone.isBlank() ? null : phone,
-                department.isBlank() ? null : department);
+        User user = userService.create(fullName, email, phone, department);
         System.out.println("\n[ Успешно ] Пользователь создан с ID: " + user.getId());
     }
 
     private void updateUser() {
         int id = readInt("Введите ID пользователя для редактирования: ");
         User existing = userService.findById(id);
-        System.out.println("Текущие данные:");
+        System.out.println("\nТекущие данные:");
         System.out.println(User.tableSeparator());
         System.out.println(User.tableHeader());
         System.out.println(User.tableSeparator());
@@ -164,10 +166,10 @@ public class ConsoleUI {
         String department = readLine("Новый отдел [" + (existing.getDepartment() != null ? existing.getDepartment() : "") + "]: ");
 
         userService.update(id,
-                fullName.isBlank() ? existing.getFullName() : fullName,
-                email.isBlank() ? existing.getEmail() : email,
-                phone.isBlank() ? existing.getPhone() : phone,
-                department.isBlank() ? existing.getDepartment() : department);
+                fullName.isEmpty() ? existing.getFullName() : fullName,
+                email.isEmpty() ? existing.getEmail() : email,
+                phone.isEmpty() ? existing.getPhone() : phone,
+                department.isEmpty() ? existing.getDepartment() : department);
         System.out.println("\n[ Успешно ] Данные пользователя обновлены.");
     }
 
@@ -176,7 +178,7 @@ public class ConsoleUI {
         User user = userService.findById(id);
         System.out.println("Удалить пользователя: " + user.getFullName() + "?");
         String confirm = readLine("Введите 'да' для подтверждения: ");
-        if ("да".equalsIgnoreCase(confirm.trim())) {
+        if ("да".equalsIgnoreCase(confirm)) {
             userService.delete(id);
             System.out.println("\n[ Успешно ] Пользователь удалён.");
         } else {
@@ -238,22 +240,12 @@ public class ConsoleUI {
         listUsers();
 
         int userId = readInt("ID пользователя: ");
-        String title = readLine("Название документа: ");
+        String title = readNonEmptyLine("Название документа: ", "Название документа не может быть пустым.");
         String description = readLine("Описание (Enter — пропустить): ");
-        String category = readLine("Категория: ");
+        String category = chooseCategory("Категория документа:", null);
+        Priority priority = choosePriority("Приоритет запроса:", Priority.MEDIUM);
 
-        System.out.println("Приоритеты: LOW (Низкий), MEDIUM (Средний), HIGH (Высокий), CRITICAL (Критический)");
-        String priorityStr = readLine("Приоритет [MEDIUM]: ");
-        Priority priority;
-        try {
-            priority = priorityStr.isBlank() ? Priority.MEDIUM : Priority.fromString(priorityStr.trim());
-        } catch (IllegalArgumentException e) {
-            System.out.println("[ Внимание ] " + e.getMessage() + " Установлен MEDIUM.");
-            priority = Priority.MEDIUM;
-        }
-
-        DocumentRequest req = requestService.create(userId, title,
-                description.isBlank() ? null : description, category, priority);
+        DocumentRequest req = requestService.create(userId, title, description, category, priority);
         System.out.println("\n[ Успешно ] Запрос создан с ID: " + req.getId());
     }
 
@@ -266,23 +258,14 @@ public class ConsoleUI {
         int userId = readIntOrDefault("Новый ID пользователя [" + existing.getUserId() + "]: ", existing.getUserId());
         String title = readLine("Новое название [" + existing.getDocumentTitle() + "]: ");
         String description = readLine("Новое описание [" + (existing.getDescription() != null ? existing.getDescription() : "") + "]: ");
-        String category = readLine("Новая категория [" + existing.getCategory() + "]: ");
-
-        System.out.println("Приоритеты: LOW, MEDIUM, HIGH, CRITICAL");
-        String priorityStr = readLine("Новый приоритет [" + existing.getPriority().name() + "]: ");
-        Priority priority;
-        try {
-            priority = priorityStr.isBlank() ? existing.getPriority() : Priority.fromString(priorityStr.trim());
-        } catch (IllegalArgumentException e) {
-            System.out.println("[ Внимание ] " + e.getMessage() + " Оставлен прежний.");
-            priority = existing.getPriority();
-        }
+        String category = chooseCategory("Новая категория [" + existing.getCategory() + "]:", existing.getCategory());
+        Priority priority = choosePriority("Новый приоритет [" + existing.getPriority().getDisplayName() + "]:", existing.getPriority());
 
         requestService.update(id,
                 userId,
-                title.isBlank() ? existing.getDocumentTitle() : title,
-                description.isBlank() ? existing.getDescription() : description,
-                category.isBlank() ? existing.getCategory() : category,
+                title.isEmpty() ? existing.getDocumentTitle() : title,
+                description.isEmpty() ? existing.getDescription() : description,
+                category.isEmpty() ? existing.getCategory() : category,
                 priority);
         System.out.println("\n[ Успешно ] Запрос обновлён.");
     }
@@ -292,19 +275,9 @@ public class ConsoleUI {
         DocumentRequest req = requestService.findById(id);
         System.out.println("Текущий статус: " + req.getStatus().getDisplayName());
 
-        System.out.println("Доступные статусы:");
-        for (RequestStatus s : RequestStatus.values()) {
-            System.out.println("  - " + s.name() + " (" + s.getDisplayName() + ")");
-        }
-
-        String statusStr = readLine("Новый статус: ");
-        try {
-            RequestStatus newStatus = RequestStatus.fromString(statusStr.trim());
-            requestService.changeStatus(id, newStatus);
-            System.out.println("\n[ Успешно ] Статус изменён на: " + newStatus.getDisplayName());
-        } catch (IllegalArgumentException e) {
-            System.out.println("[ Внимание ] " + e.getMessage());
-        }
+        RequestStatus newStatus = chooseStatus("Выберите новый статус:", req.getStatus());
+        requestService.changeStatus(id, newStatus);
+        System.out.println("\n[ Успешно ] Статус изменён на: " + newStatus.getDisplayName());
     }
 
     private void deleteRequest() {
@@ -312,7 +285,7 @@ public class ConsoleUI {
         DocumentRequest req = requestService.findById(id);
         System.out.println("Удалить запрос: " + req.getDocumentTitle() + "?");
         String confirm = readLine("Введите 'да' для подтверждения: ");
-        if ("да".equalsIgnoreCase(confirm.trim())) {
+        if ("да".equalsIgnoreCase(confirm)) {
             requestService.delete(id);
             System.out.println("\n[ Успешно ] Запрос удалён.");
         } else {
@@ -359,11 +332,11 @@ public class ConsoleUI {
             try {
                 switch (choice) {
                     case 1 -> {
-                        String query = readLine("Название документа: ");
+                        String query = readNonEmptyLine("Название документа для поиска: ", "Строка поиска не может быть пустой.");
                         printRequestTable(requestService.searchByTitle(query));
                     }
                     case 2 -> {
-                        String query = readLine("Ключевое слово в описании: ");
+                        String query = readNonEmptyLine("Ключевое слово в описании: ", "Строка поиска не может быть пустой.");
                         printRequestTable(requestService.searchByDescription(query));
                     }
                     case 3 -> {
@@ -371,7 +344,7 @@ public class ConsoleUI {
                         printRequestTable(requestService.findByUserId(userId));
                     }
                     case 4 -> {
-                        String name = readLine("ФИО (частичное): ");
+                        String name = readNonEmptyLine("ФИО (частичное): ", "Строка поиска не может быть пустой.");
                         List<User> users = userService.searchByName(name);
                         if (users.isEmpty()) {
                             System.out.println("\nПользователи не найдены.");
@@ -413,31 +386,16 @@ public class ConsoleUI {
             try {
                 switch (choice) {
                     case 1 -> {
-                        System.out.println("Доступные статусы:");
-                        for (RequestStatus s : RequestStatus.values()) {
-                            System.out.println("  - " + s.name() + " (" + s.getDisplayName() + ")");
-                        }
-                        String statusStr = readLine("Введите статус: ");
-                        RequestStatus status = RequestStatus.fromString(statusStr.trim());
+                        RequestStatus status = chooseStatus("Выберите статус для фильтрации:", null);
                         printRequestTable(requestService.filterByStatus(status));
                     }
                     case 2 -> {
-                        System.out.println("Доступные приоритеты:");
-                        for (Priority p : Priority.values()) {
-                            System.out.println("  - " + p.name() + " (" + p.getDisplayName() + ")");
-                        }
-                        String prStr = readLine("Введите приоритет: ");
-                        Priority pr = Priority.fromString(prStr.trim());
-                        printRequestTable(requestService.filterByPriority(pr));
+                        Priority priority = choosePriority("Выберите приоритет для фильтрации:", null);
+                        printRequestTable(requestService.filterByPriority(priority));
                     }
                     case 3 -> {
-                        List<String> categories = requestService.findAllCategories();
-                        System.out.println("Доступные категории:");
-                        for (String c : categories) {
-                            System.out.println("  - " + c);
-                        }
-                        String cat = readLine("Введите категорию: ");
-                        printRequestTable(requestService.filterByCategory(cat));
+                        String category = chooseCategory("Выберите категорию для фильтрации:", null);
+                        printRequestTable(requestService.filterByCategory(category));
                     }
                     case 4 -> {
                         System.out.println("Введите даты в формате дд.мм.гггг");
@@ -479,38 +437,141 @@ public class ConsoleUI {
     }
 
     private void exportMenu() {
-        System.out.println();
-        System.out.println("============================================================");
-        System.out.println("                       ЭКСПОРТ ДАННЫХ                       ");
-        System.out.println("============================================================");
-        System.out.println("  1. Экспорт в Excel (.xlsx)");
-        System.out.println("  2. Экспорт в CSV (.csv)");
-        System.out.println("  0. Назад");
-        System.out.println("============================================================");
+        while (true) {
+            System.out.println();
+            System.out.println("============================================================");
+            System.out.println("                       ЭКСПОРТ ДАННЫХ                       ");
+            System.out.println("============================================================");
+            System.out.println("  1. Экспорт в Excel (.xlsx)");
+            System.out.println("  2. Экспорт в CSV (.csv)");
+            System.out.println("  0. Назад");
+            System.out.println("============================================================");
 
-        int choice = readInt("Выберите: ");
-        try {
-            switch (choice) {
-                case 1 -> {
-                    String path = readLine("Путь к файлу [export.xlsx]: ");
-                    if (path.isBlank()) path = "export.xlsx";
+            int formatChoice = readInt("Выберите формат: ");
+            if (formatChoice == 0) return;
+            if (formatChoice != 1 && formatChoice != 2) {
+                System.out.println("\n[ Ошибка ] Неверный пункт меню.\n");
+                continue;
+            }
+
+            if (formatChoice == 1) {
+                String defaultFileName = "export_" + LocalDateTime.now().format(FILE_TS_FMT) + ".xlsx";
+                System.out.println("\nКуда экспортировать:");
+                System.out.println("  1. Создать новый файл (" + defaultFileName + " или ввести своё имя)");
+                System.out.println("  2. Записать в существующий файл (указать путь)");
+                System.out.println("  0. Отмена");
+
+                int targetChoice = readInt("Выберите действие: ");
+                if (targetChoice == 0) continue;
+
+                String filePath;
+                if (targetChoice == 1) {
+                    String customName = readLine("Имя нового файла [Enter для '" + defaultFileName + "']: ");
+                    if (customName.isEmpty()) {
+                        filePath = defaultFileName;
+                    } else {
+                        filePath = customName.endsWith(".xlsx") ? customName : customName + ".xlsx";
+                    }
+                } else if (targetChoice == 2) {
+                    filePath = readNonEmptyLine("Введите путь к файлу: ", "Путь не может быть пустым.");
+                    File f = new File(filePath);
+                    if (!f.exists()) {
+                        System.out.println("[ Инфо ] Файл '" + filePath + "' не найден, он будет создан автоматически.");
+                    }
+                } else {
+                    System.out.println("\n[ Ошибка ] Неверный пункт.\n");
+                    continue;
+                }
+
+                try {
                     List<User> users = userService.findAll();
                     List<DocumentRequest> requests = requestService.findAll();
-                    ExcelExporter.exportToExcel(users, requests, path);
-                    System.out.println("\n[ Успешно ] Данные экспортированы в: " + path);
+                    String savedPath = ExcelExporter.exportToExcel(users, requests, filePath);
+                    System.out.println("\n[ Успешно ] Данные экспортированы в файл: " + savedPath);
+                } catch (IOException e) {
+                    System.out.println("\n[ Ошибка экспорта ] " + e.getMessage());
                 }
-                case 2 -> {
-                    String path = readLine("Путь к файлу [export.csv]: ");
-                    if (path.isBlank()) path = "export.csv";
-                    List<DocumentRequest> requests = requestService.findAll();
-                    ExcelExporter.exportToCsv(requests, path);
-                    System.out.println("\n[ Успешно ] Данные экспортированы в: " + path);
+
+            } else {
+                System.out.println("\nКакую таблицу экспортировать в CSV:");
+                System.out.println("  1. Запросы на документы");
+                System.out.println("  2. Пользователи");
+                System.out.println("  3. Обе таблицы (в два отдельных файла)");
+                System.out.println("  0. Отмена");
+
+                int tableChoice = readInt("Выберите таблицу: ");
+                if (tableChoice == 0) continue;
+                if (tableChoice < 1 || tableChoice > 3) {
+                    System.out.println("\n[ Ошибка ] Неверный пункт.\n");
+                    continue;
                 }
-                case 0 -> {}
-                default -> System.out.println("\n[ Ошибка ] Неверный пункт меню.\n");
+
+                String timestamp = LocalDateTime.now().format(FILE_TS_FMT);
+                try {
+                    if (tableChoice == 1) {
+                        String defaultName = "export_requests_" + timestamp + ".csv";
+                        String targetPath = askCsvFilePath(defaultName);
+                        if (targetPath == null) continue;
+                        List<DocumentRequest> requests = requestService.findAll();
+                        String saved = ExcelExporter.exportRequestsToCsv(requests, targetPath);
+                        System.out.println("\n[ Успешно ] Запросы экспортированы в: " + saved);
+                    } else if (tableChoice == 2) {
+                        String defaultName = "export_users_" + timestamp + ".csv";
+                        String targetPath = askCsvFilePath(defaultName);
+                        if (targetPath == null) continue;
+                        List<User> users = userService.findAll();
+                        String saved = ExcelExporter.exportUsersToCsv(users, targetPath);
+                        System.out.println("\n[ Успешно ] Пользователи экспортированы в: " + saved);
+                    } else {
+                        String reqName = "export_requests_" + timestamp + ".csv";
+                        String userName = "export_users_" + timestamp + ".csv";
+
+                        String reqPath = askCsvFilePath(reqName);
+                        if (reqPath == null) continue;
+                        String userPath = askCsvFilePath(userName);
+                        if (userPath == null) continue;
+
+                        List<DocumentRequest> requests = requestService.findAll();
+                        List<User> users = userService.findAll();
+                        String savedReq = ExcelExporter.exportRequestsToCsv(requests, reqPath);
+                        String savedUsers = ExcelExporter.exportUsersToCsv(users, userPath);
+
+                        System.out.println("\n[ Успешно ] Обе таблицы экспортированы:");
+                        System.out.println("  - Запросы: " + savedReq);
+                        System.out.println("  - Пользователи: " + savedUsers);
+                    }
+                } catch (IOException e) {
+                    System.out.println("\n[ Ошибка экспорта ] " + e.getMessage());
+                }
             }
-        } catch (IOException e) {
-            System.out.println("\n[ Ошибка экспорта ] " + e.getMessage());
+        }
+    }
+
+    private String askCsvFilePath(String defaultFileName) {
+        System.out.println("\nКуда экспортировать:");
+        System.out.println("  1. Создать новый файл (" + defaultFileName + " или ввести своё имя)");
+        System.out.println("  2. Записать в существующий файл (указать путь)");
+        System.out.println("  0. Отмена");
+
+        int choice = readInt("Выберите действие: ");
+        if (choice == 0) return null;
+
+        if (choice == 1) {
+            String customName = readLine("Имя нового файла [Enter для '" + defaultFileName + "']: ");
+            if (customName.isEmpty()) {
+                return defaultFileName;
+            }
+            return customName.endsWith(".csv") ? customName : customName + ".csv";
+        } else if (choice == 2) {
+            String path = readNonEmptyLine("Введите путь к файлу: ", "Путь не может быть пустым.");
+            File f = new File(path);
+            if (!f.exists()) {
+                System.out.println("[ Инфо ] Файл '" + path + "' не найден, он будет создан автоматически.");
+            }
+            return path;
+        } else {
+            System.out.println("\n[ Ошибка ] Неверный пункт.\n");
+            return null;
         }
     }
 
@@ -537,15 +598,118 @@ public class ConsoleUI {
         System.out.printf("Всего записей: %d%n", requests.size());
     }
 
+    private RequestStatus chooseStatus(String prompt, RequestStatus defaultStatus) {
+        System.out.println("\n" + prompt);
+        RequestStatus[] statuses = RequestStatus.values();
+        for (int i = 0; i < statuses.length; i++) {
+            System.out.printf("  %d. %s (%s)%n", i + 1, statuses[i].name(), statuses[i].getDisplayName());
+        }
+        while (true) {
+            String defHint = defaultStatus != null ? " [Enter для " + defaultStatus.getDisplayName() + "]: " : ": ";
+            System.out.print("Выберите номер (1-" + statuses.length + ") или введите статус" + defHint);
+            String input = readLine("");
+            if (input.isEmpty() && defaultStatus != null) {
+                return defaultStatus;
+            }
+            try {
+                return RequestStatus.fromString(input);
+            } catch (IllegalArgumentException e) {
+                System.out.println("[ Ошибка ] " + e.getMessage() + ". Повторите ввод.");
+            }
+        }
+    }
+
+    private Priority choosePriority(String prompt, Priority defaultPriority) {
+        System.out.println("\n" + prompt);
+        Priority[] priorities = Priority.values();
+        for (int i = 0; i < priorities.length; i++) {
+            System.out.printf("  %d. %s (%s)%n", i + 1, priorities[i].name(), priorities[i].getDisplayName());
+        }
+        while (true) {
+            String defHint = defaultPriority != null ? " [Enter для " + defaultPriority.getDisplayName() + "]: " : ": ";
+            System.out.print("Выберите номер (1-" + priorities.length + ") или введите приоритет" + defHint);
+            String input = readLine("");
+            if (input.isEmpty() && defaultPriority != null) {
+                return defaultPriority;
+            }
+            try {
+                return Priority.fromString(input);
+            } catch (IllegalArgumentException e) {
+                System.out.println("[ Ошибка ] " + e.getMessage() + ". Повторите ввод.");
+            }
+        }
+    }
+
+    private String chooseCategory(String prompt, String defaultCategory) {
+        List<String> categories = requestService.findAllCategories();
+        System.out.println("\n" + prompt);
+        if (!categories.isEmpty()) {
+            System.out.println("Существующие категории:");
+            for (int i = 0; i < categories.size(); i++) {
+                System.out.printf("  %d. %s%n", i + 1, categories.get(i));
+            }
+            System.out.println("  0. Ввести другую категорию вручную");
+        }
+        while (true) {
+            String defHint = defaultCategory != null && !defaultCategory.isEmpty()
+                    ? " [Enter для '" + defaultCategory + "']: "
+                    : ": ";
+
+            if (!categories.isEmpty()) {
+                System.out.print("Выберите номер (1-" + categories.size() + ") или 0 для ввода" + defHint);
+            } else {
+                System.out.print("Введите категорию" + defHint);
+            }
+
+            String input = readLine("");
+            if (input.isEmpty() && defaultCategory != null && !defaultCategory.isEmpty()) {
+                return defaultCategory;
+            }
+
+            if (!categories.isEmpty()) {
+                try {
+                    int num = Integer.parseInt(input);
+                    if (num >= 1 && num <= categories.size()) {
+                        return categories.get(num - 1);
+                    }
+                    if (num == 0) {
+                        return readNonEmptyLine("Введите название новой категории: ", "Категория не может быть пустой.");
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+
+            if (!input.isEmpty()) {
+                return input;
+            }
+            System.out.println("[ Ошибка ] Категория не может быть пустой.");
+        }
+    }
+
     private String readLine(String prompt) {
-        System.out.print(prompt);
+        if (!prompt.isEmpty()) {
+            System.out.print(prompt);
+        }
+        if (!scanner.hasNextLine()) {
+            return "";
+        }
         return scanner.nextLine().trim();
+    }
+
+    private String readNonEmptyLine(String prompt, String errorMsg) {
+        while (true) {
+            String line = readLine(prompt);
+            if (!line.isEmpty()) {
+                return line;
+            }
+            System.out.println("[ Ошибка ] " + errorMsg);
+        }
     }
 
     private int readInt(String prompt) {
         while (true) {
             System.out.print(prompt);
-            String input = scanner.nextLine().trim();
+            String input = scanner.hasNextLine() ? scanner.nextLine().trim() : "";
             try {
                 return Integer.parseInt(input);
             } catch (NumberFormatException e) {
@@ -556,8 +720,8 @@ public class ConsoleUI {
 
     private int readIntOrDefault(String prompt, int defaultValue) {
         System.out.print(prompt);
-        String input = scanner.nextLine().trim();
-        if (input.isBlank()) return defaultValue;
+        String input = scanner.hasNextLine() ? scanner.nextLine().trim() : "";
+        if (input.isEmpty()) return defaultValue;
         try {
             return Integer.parseInt(input);
         } catch (NumberFormatException e) {
@@ -567,13 +731,17 @@ public class ConsoleUI {
     }
 
     private LocalDate readDate(String prompt) {
-        System.out.print(prompt);
-        String input = scanner.nextLine().trim();
-        try {
-            return LocalDate.parse(input, DATE_FMT);
-        } catch (DateTimeParseException e) {
-            System.out.println("[ Ошибка ] Некорректный формат даты. Используйте дд.мм.гггг");
-            return null;
+        while (true) {
+            System.out.print(prompt);
+            String input = scanner.hasNextLine() ? scanner.nextLine().trim() : "";
+            if (input.isEmpty()) {
+                return null;
+            }
+            try {
+                return LocalDate.parse(input, DATE_FMT);
+            } catch (DateTimeParseException e) {
+                System.out.println("[ Ошибка ] Некорректный формат даты. Используйте дд.мм.гггг");
+            }
         }
     }
 }

@@ -35,11 +35,15 @@ public class DocumentRequestService {
 
     public DocumentRequest create(int userId, String documentTitle, String description,
                                   String category, Priority priority) {
-        if (documentTitle == null || documentTitle.isBlank()) {
+        String trimmedTitle = documentTitle != null ? documentTitle.trim() : "";
+        String trimmedCat = category != null ? category.trim() : "";
+        String trimmedDesc = (description != null && !description.trim().isEmpty()) ? description.trim() : null;
+
+        if (trimmedTitle.isEmpty()) {
             throw new BusinessException("Название документа не может быть пустым.");
         }
 
-        if (category == null || category.isBlank()) {
+        if (trimmedCat.isEmpty()) {
             throw new BusinessException("Категория документа не может быть пустой.");
         }
 
@@ -51,7 +55,7 @@ public class DocumentRequestService {
             priority = Priority.MEDIUM;
         }
 
-        DocumentRequest req = new DocumentRequest(userId, documentTitle.trim(), description, category.trim(), priority);
+        DocumentRequest req = new DocumentRequest(userId, trimmedTitle, trimmedDesc, trimmedCat, priority);
         return requestRepository.save(req);
     }
 
@@ -68,10 +72,14 @@ public class DocumentRequestService {
                        String category, Priority priority) {
         DocumentRequest existing = findById(id);
 
-        if (documentTitle == null || documentTitle.isBlank()) {
+        String trimmedTitle = documentTitle != null ? documentTitle.trim() : "";
+        String trimmedCat = category != null ? category.trim() : "";
+        String trimmedDesc = (description != null && !description.trim().isEmpty()) ? description.trim() : null;
+
+        if (trimmedTitle.isEmpty()) {
             throw new BusinessException("Название документа не может быть пустым.");
         }
-        if (category == null || category.isBlank()) {
+        if (trimmedCat.isEmpty()) {
             throw new BusinessException("Категория документа не может быть пустой.");
         }
         if (!userService.existsById(userId)) {
@@ -79,10 +87,10 @@ public class DocumentRequestService {
         }
 
         existing.setUserId(userId);
-        existing.setDocumentTitle(documentTitle.trim());
-        existing.setDescription(description);
-        existing.setCategory(category.trim());
-        existing.setPriority(priority);
+        existing.setDocumentTitle(trimmedTitle);
+        existing.setDescription(trimmedDesc);
+        existing.setCategory(trimmedCat);
+        existing.setPriority(priority != null ? priority : Priority.MEDIUM);
         requestRepository.update(existing);
     }
 
@@ -116,17 +124,19 @@ public class DocumentRequestService {
     }
 
     public List<DocumentRequest> searchByTitle(String title) {
-        if (title == null || title.isBlank()) {
+        String trimmed = title != null ? title.trim() : "";
+        if (trimmed.isEmpty()) {
             throw new BusinessException("Строка поиска не может быть пустой.");
         }
-        return requestRepository.searchByTitle(title);
+        return requestRepository.searchByTitle(trimmed);
     }
 
     public List<DocumentRequest> searchByDescription(String keyword) {
-        if (keyword == null || keyword.isBlank()) {
+        String trimmed = keyword != null ? keyword.trim() : "";
+        if (trimmed.isEmpty()) {
             throw new BusinessException("Строка поиска не может быть пустой.");
         }
-        return requestRepository.searchByDescription(keyword);
+        return requestRepository.searchByDescription(trimmed);
     }
 
     public List<DocumentRequest> findByUserId(int userId) {
@@ -145,10 +155,17 @@ public class DocumentRequestService {
     }
 
     public List<DocumentRequest> filterByCategory(String category) {
-        return requestRepository.filterByCategory(category);
+        String trimmed = category != null ? category.trim() : "";
+        if (trimmed.isEmpty()) {
+            throw new BusinessException("Категория для фильтрации не может быть пустой.");
+        }
+        return requestRepository.filterByCategory(trimmed);
     }
 
     public List<DocumentRequest> filterByDateRange(LocalDate from, LocalDate to) {
+        if (from == null || to == null) {
+            throw new BusinessException("Даты диапазона должны быть указаны.");
+        }
         if (from.isAfter(to)) {
             throw new BusinessException("Дата начала не может быть позже даты окончания.");
         }

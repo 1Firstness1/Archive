@@ -5,6 +5,7 @@ import ru.mirea.archive.exception.DatabaseException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Properties;
 
 public class DatabaseManager {
 
@@ -17,7 +18,12 @@ public class DatabaseManager {
 
     public static Connection getConnection() {
         try {
-            return DriverManager.getConnection(URL, USER, PASSWORD);
+            Properties props = new Properties();
+            props.setProperty("user", USER);
+            props.setProperty("password", PASSWORD);
+            props.setProperty("characterEncoding", "UTF-8");
+            props.setProperty("options", "-c client_encoding=UTF8");
+            return DriverManager.getConnection(URL, props);
         } catch (SQLException e) {
             throw new DatabaseException("Не удалось подключиться к базе данных: " + e.getMessage(), e);
         }
