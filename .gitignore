@@ -1,15 +1,49 @@
-### Maven ###
+### Maven & Build ###
 target/
+**/target/
+pom.xml.tag
+pom.xml.releaseBackup
+release.properties
 
-### Java ###
+### Java & Bytecode ###
 *.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+
+### Logs & Crashes ###
+*.log
 hs_err_pid*
 replay_pid*
+
+### Generated Exports & Reports ###
+*.xlsx
+*.csv
 
 ### IntelliJ IDEA ###
 .idea/
 *.iml
+*.iws
+*.ipr
 out/
+**/out/
 
-### Mac OS ###
+### VS Code & Eclipse ###
+.vscode/
+.classpath
+.project
+.settings/
+
+### macOS ###
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+### Windows ###
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini

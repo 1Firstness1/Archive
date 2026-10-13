@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<DialogPane xmlns:fx="http://javafx.com/fxml" fx:controller="ru.mirea.archive.controller.RequestDialogController"
+            prefWidth="500" prefHeight="480">
+
+    <headerText>Запрос на архивный документ</headerText>
+
+    <content>
+        <VBox spacing="12">
+            <padding><Insets top="8" right="8" bottom="8" left="8"/></padding>
+
+            <Label text="Пользователь:" styleClass="section-label"/>
+            <ComboBox fx:id="userCombo" maxWidth="Infinity" promptText="Выберите пользователя"/>
+            <Label fx:id="userErrorLabel" styleClass="error-label" visible="false" managed="false"/>
+
+            <Label text="Название документа:" styleClass="section-label"/>
+            <TextField fx:id="titleField" promptText="Введите название документа"/>
+            <Label fx:id="titleErrorLabel" styleClass="error-label" visible="false" managed="false"/>
+
+            <Label text="Описание:" styleClass="section-label"/>
+            <TextArea fx:id="descriptionArea" promptText="Описание запроса (необязательно)" prefRowCount="3"/>
+
+            <Label text="Категория:" styleClass="section-label"/>
+            <ComboBox fx:id="categoryCombo" maxWidth="Infinity" editable="true"
+                      promptText="Выберите или введите категорию"/>
+            <Label fx:id="categoryErrorLabel" styleClass="error-label" visible="false" managed="false"/>
+
+            <Label text="Приоритет:" styleClass="section-label"/>
+            <ComboBox fx:id="priorityCombo" maxWidth="Infinity" promptText="Выберите приоритет"/>
+            <Label fx:id="priorityErrorLabel" styleClass="error-label" visible="false" managed="false"/>
+        </VBox>
+    </content>
+
+    <buttonTypes>
+        <ButtonType fx:constant="OK"/>
+        <ButtonType fx:constant="CANCEL"/>
+    </buttonTypes>
+
+</DialogPane>

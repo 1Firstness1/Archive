@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<DialogPane xmlns:fx="http://javafx.com/fxml" fx:controller="ru.mirea.archive.controller.UserDialogController"
+            prefWidth="450" prefHeight="380">
+
+    <headerText>Пользователь системы</headerText>
+
+    <content>
+        <VBox spacing="12">
+            <padding><Insets top="8" right="8" bottom="8" left="8"/></padding>
+
+            <Label text="ФИО:" styleClass="section-label"/>
+            <TextField fx:id="fullNameField" promptText="Иванов Иван Иванович"/>
+            <Label fx:id="nameErrorLabel" styleClass="error-label" visible="false" managed="false"/>
+
+            <Label text="Email:" styleClass="section-label"/>
+            <TextField fx:id="emailField" promptText="user@example.com"/>
+            <Label fx:id="emailErrorLabel" styleClass="error-label" visible="false" managed="false"/>
+
+            <Label text="Телефон:" styleClass="section-label"/>
+            <TextField fx:id="phoneField" promptText="+7 (999) 123-45-67 (необязательно)"/>
+
+            <Label text="Отдел:" styleClass="section-label"/>
+            <TextField fx:id="departmentField" promptText="Название отдела (необязательно)"/>
+        </VBox>
+    </content>
+
+    <buttonTypes>
+        <ButtonType fx:constant="OK"/>
+        <ButtonType fx:constant="CANCEL"/>
+    </buttonTypes>
+
+</DialogPane>

@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: archive_postgres
+    environment:
+      POSTGRES_DB: archive_db
+      POSTGRES_USER: artem
+      POSTGRES_PASSWORD: 1234
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: always
+
+volumes:
+  postgres_data:
