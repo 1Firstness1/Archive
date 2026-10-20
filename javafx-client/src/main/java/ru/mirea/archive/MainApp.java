@@ -14,17 +14,6 @@ public class MainApp extends Application {
 
     @Override
     public void start(Stage primaryStage) throws IOException {
-        if (!DatabaseManager.testConnection()) {
-            javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
-                    javafx.scene.control.Alert.AlertType.ERROR);
-            alert.setTitle("Ошибка подключения");
-            alert.setHeaderText("Не удалось подключиться к базе данных");
-            alert.setContentText("Убедитесь, что PostgreSQL запущен и база 'archive_db' создана.\n"
-                    + "Параметры: localhost:5432/archive_db (artem/1234)");
-            alert.showAndWait();
-            return;
-        }
-
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/main_view.fxml"));
         Parent root = loader.load();
 

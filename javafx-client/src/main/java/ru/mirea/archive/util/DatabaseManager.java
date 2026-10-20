@@ -45,8 +45,10 @@ public class DatabaseManager {
     }
 
     public static boolean testConnection() {
-        try (Connection conn = getConnection()) {
-            return conn != null && !conn.isClosed();
+        try (Connection conn = getConnection();
+             java.sql.Statement stmt = conn.createStatement();
+             java.sql.ResultSet rs = stmt.executeQuery("SELECT 1 FROM document_requests LIMIT 1")) {
+            return true;
         } catch (Exception e) {
             return false;
         }

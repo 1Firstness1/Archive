@@ -424,3 +424,57 @@
     -fx-background-color: #89b4fa;
     -fx-text-fill: #1e1e2e;
 }
+
+/* ===== Banner & Status Badges ===== */
+.offline-banner {
+    -fx-background-color: #313244;
+    -fx-border-color: #f38ba8;
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 8 16;
+}
+
+.offline-banner-text {
+    -fx-text-fill: #f38ba8;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+}
+
+.status-badge-online {
+    -fx-background-color: #a6e3a1;
+    -fx-text-fill: #11111b;
+    -fx-font-weight: bold;
+    -fx-padding: 4 10;
+    -fx-background-radius: 12;
+    -fx-font-size: 12px;
+}
+
+.status-badge-offline {
+    -fx-background-color: #f38ba8;
+    -fx-text-fill: #11111b;
+    -fx-font-weight: bold;
+    -fx-padding: 4 10;
+    -fx-background-radius: 12;
+    -fx-font-size: 12px;
+}
+
+.btn-secondary {
+    -fx-background-color: #45475a;
+    -fx-text-fill: #cdd6f4;
+}
+
+.btn-secondary:hover {
+    -fx-background-color: #585b70;
+}
+
+.card {
+    -fx-background-color: #24273a;
+    -fx-background-radius: 12;
+    -fx-border-color: #363a4f;
+    -fx-border-width: 1;
+    -fx-border-radius: 12;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 16, 0, 0, 6);
+}
+
+

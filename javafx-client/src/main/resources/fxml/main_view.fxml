@@ -7,112 +7,267 @@
 <BorderPane xmlns:fx="http://javafx.com/fxml" fx:controller="ru.mirea.archive.controller.MainController">
 
     <top>
-        <VBox>
+        <VBox spacing="6">
+            <padding><Insets bottom="6"/></padding>
             <HBox styleClass="toolbar-panel" alignment="CENTER_LEFT" spacing="12">
                 <Label text="Архив документов" styleClass="title-label"/>
+                <Label fx:id="serverStatusBadge" text="Проверка..." styleClass="status-badge-offline"/>
                 <Region HBox.hgrow="ALWAYS"/>
+                <Label fx:id="userStatusLabel" text="Требуется вход" style="-fx-text-fill: #cdd6f4; -fx-font-weight: bold;"/>
+                <Button fx:id="btnChangePassword" text="Сменить пароль" styleClass="btn-secondary" onAction="#onChangePasswordDialog" visible="false" managed="false"/>
+                <Button fx:id="btnLogout" text="Выйти" styleClass="btn-danger" onAction="#onLogout" visible="false" managed="false"/>
+                <Separator orientation="VERTICAL"/>
                 <Button fx:id="btnStatistics" text="Статистика" styleClass="btn-warning" onAction="#onShowStatistics"/>
                 <Button fx:id="btnExportXlsx" text="Экспорт XLSX" styleClass="btn-export" onAction="#onExportXlsx"/>
                 <Button fx:id="btnExportCsv" text="Экспорт CSV" styleClass="btn-export" onAction="#onExportCsv"/>
+            </HBox>
+
+            <HBox fx:id="offlineBanner" styleClass="offline-banner" alignment="CENTER_LEFT" spacing="12" visible="false" managed="false">
+                <Label fx:id="offlineBannerLabel"
+                       text="Сервер Backend / PostgreSQL недоступен (localhost:8080). Окно открыто, но авторизация и операции с базой заблокированы."
+                       styleClass="offline-banner-text" HBox.hgrow="ALWAYS"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button text="Проверить подключение" styleClass="btn-primary" onAction="#onRetryConnection"/>
             </HBox>
         </VBox>
     </top>
 
     <center>
-        <TabPane fx:id="tabPane" tabClosingPolicy="UNAVAILABLE">
+        <StackPane>
+            <!-- Блок авторизации прямо в окне самой программы -->
+            <VBox fx:id="authContainer" alignment="CENTER" spacing="16">
+                <padding><Insets top="30" right="30" bottom="30" left="30"/></padding>
 
-            <Tab text="Запросы на документы">
-                <VBox spacing="10">
-                    <padding><Insets top="10" right="16" bottom="10" left="16"/></padding>
+                <VBox spacing="14" maxWidth="460" styleClass="card" alignment="CENTER">
+                    <padding><Insets top="24" right="28" bottom="24" left="28"/></padding>
 
-                    <HBox spacing="10" alignment="CENTER_LEFT">
-                        <Button text="+ Добавить" styleClass="btn-success" onAction="#onAddRequest"/>
-                        <Button text="Редактировать" styleClass="btn-primary" onAction="#onEditRequest"/>
-                        <Button text="Удалить" styleClass="btn-danger" onAction="#onDeleteRequest"/>
-                        <Button text="Изменить статус" styleClass="btn-warning" onAction="#onChangeStatus"/>
-                        <Region HBox.hgrow="ALWAYS"/>
-                        <Button text="Обновить" onAction="#onRefreshRequests"/>
-                    </HBox>
+                    <VBox spacing="4" alignment="CENTER">
+                        <Label text="Вход в «Архив документов»" style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #89b4fa;"/>
+                        <Label text="Авторизация через Spring Boot REST API" style="-fx-text-fill: #a6adc8; -fx-font-size: 13px;"/>
+                    </VBox>
 
-                    <HBox spacing="10" alignment="CENTER_LEFT" styleClass="filter-panel">
-                        <Label text="Поиск:"/>
-                        <TextField fx:id="searchRequestField" promptText="Название документа..." prefWidth="200"
-                                   onAction="#onSearchRequests"/>
-                        <Button text="Найти" onAction="#onSearchRequests"/>
+                    <TabPane fx:id="authTabPane" tabClosingPolicy="UNAVAILABLE" maxWidth="420">
+                        <Tab text="Вход">
+                            <VBox spacing="12">
+                                <padding><Insets top="16" right="4" bottom="8" left="4"/></padding>
 
-                        <Separator orientation="VERTICAL"/>
+                                <VBox spacing="4">
+                                    <Label text="Логин:" style="-fx-font-weight: bold;"/>
+                                    <TextField fx:id="inlineLoginUsernameField" promptText="admin" text="admin"/>
+                                </VBox>
 
-                        <Label text="Статус:"/>
-                        <ComboBox fx:id="filterStatusCombo" prefWidth="150" onAction="#onFilterRequests"/>
+                                <VBox spacing="4">
+                                    <Label text="Пароль:" style="-fx-font-weight: bold;"/>
+                                    <PasswordField fx:id="inlineLoginPasswordField" promptText="admin123" text="admin123" onAction="#onInlineLogin"/>
+                                </VBox>
 
-                        <Label text="Приоритет:"/>
-                        <ComboBox fx:id="filterPriorityCombo" prefWidth="140" onAction="#onFilterRequests"/>
+                                <VBox spacing="2" style="-fx-background-color: #313244; -fx-padding: 8 12; -fx-background-radius: 6;">
+                                    <Label text="Данные для старта хранятся в backend/.env" style="-fx-font-size: 11px; -fx-text-fill: #f9e2af; -fx-font-weight: bold;"/>
+                                    <Label text="Логин: admin | Пароль: admin123" style="-fx-font-size: 11px; -fx-text-fill: #cdd6f4;"/>
+                                </VBox>
 
-                        <Separator orientation="VERTICAL"/>
+                                <Button fx:id="btnInlineLogin" text="Войти в систему" styleClass="btn-primary" maxWidth="Infinity" onAction="#onInlineLogin"/>
+                            </VBox>
+                        </Tab>
 
-                        <Label text="Сортировка:"/>
-                        <ComboBox fx:id="sortRequestCombo" prefWidth="170" onAction="#onSortRequests"/>
+                        <Tab text="Регистрация">
+                            <VBox spacing="10">
+                                <padding><Insets top="16" right="4" bottom="8" left="4"/></padding>
 
-                        <Region HBox.hgrow="ALWAYS"/>
-                        <Button text="Сбросить" onAction="#onResetRequestFilters"/>
-                    </HBox>
+                                <VBox spacing="4">
+                                    <Label text="Логин:" style="-fx-font-weight: bold;"/>
+                                    <TextField fx:id="inlineRegUsernameField" promptText="ivanov"/>
+                                </VBox>
 
-                    <TableView fx:id="requestTable" VBox.vgrow="ALWAYS">
-                        <columns>
-                            <TableColumn fx:id="reqIdCol" text="ID" prefWidth="50"/>
-                            <TableColumn fx:id="reqTitleCol" text="Документ" prefWidth="220"/>
-                            <TableColumn fx:id="reqCategoryCol" text="Категория" prefWidth="130"/>
-                            <TableColumn fx:id="reqStatusCol" text="Статус" prefWidth="120"/>
-                            <TableColumn fx:id="reqPriorityCol" text="Приоритет" prefWidth="110"/>
-                            <TableColumn fx:id="reqUserCol" text="Пользователь" prefWidth="170"/>
-                            <TableColumn fx:id="reqCreatedCol" text="Создан" prefWidth="140"/>
-                            <TableColumn fx:id="reqUpdatedCol" text="Обновлён" prefWidth="140"/>
-                        </columns>
-                        <placeholder>
-                            <Label text="Нет данных для отображения" style="-fx-text-fill: #6c7086;"/>
-                        </placeholder>
-                    </TableView>
+                                <VBox spacing="4">
+                                    <Label text="ФИО:" style="-fx-font-weight: bold;"/>
+                                    <TextField fx:id="inlineRegFullNameField" promptText="Иванов Иван Иванович"/>
+                                </VBox>
+
+                                <VBox spacing="4">
+                                    <Label text="Email:" style="-fx-font-weight: bold;"/>
+                                    <TextField fx:id="inlineRegEmailField" promptText="ivanov@mirea.ru"/>
+                                </VBox>
+
+                                <VBox spacing="4">
+                                    <Label text="Пароль:" style="-fx-font-weight: bold;"/>
+                                    <PasswordField fx:id="inlineRegPasswordField" promptText="Минимум 4 символа"/>
+                                </VBox>
+
+                                <VBox spacing="4">
+                                    <Label text="Подтверждение пароля:" style="-fx-font-weight: bold;"/>
+                                    <PasswordField fx:id="inlineRegConfirmPasswordField" promptText="Повторите пароль" onAction="#onInlineRegister"/>
+                                </VBox>
+
+                                <Button fx:id="btnInlineRegister" text="Зарегистрироваться" styleClass="btn-success" maxWidth="Infinity" onAction="#onInlineRegister"/>
+                            </VBox>
+                        </Tab>
+                    </TabPane>
+
+                    <Label fx:id="inlineAuthStatusLabel" wrapText="true" style="-fx-font-size: 12px; -fx-text-fill: #f38ba8;"/>
                 </VBox>
-            </Tab>
+            </VBox>
 
-            <Tab text="Пользователи">
-                <VBox spacing="10">
-                    <padding><Insets top="10" right="16" bottom="10" left="16"/></padding>
+            <!-- Основной интерфейс с таблицами (отображается после входа) -->
+            <TabPane fx:id="tabPane" tabClosingPolicy="UNAVAILABLE" visible="false" managed="false">
 
-                    <HBox spacing="10" alignment="CENTER_LEFT">
-                        <Button text="+ Добавить" styleClass="btn-success" onAction="#onAddUser"/>
-                        <Button text="Редактировать" styleClass="btn-primary" onAction="#onEditUser"/>
-                        <Button text="Удалить" styleClass="btn-danger" onAction="#onDeleteUser"/>
-                        <Region HBox.hgrow="ALWAYS"/>
-                        <Button text="Обновить" onAction="#onRefreshUsers"/>
-                    </HBox>
+                <!-- 1. Запросы на документы -->
+                <Tab text="Запросы на документы">
+                    <VBox spacing="10">
+                        <padding><Insets top="10" right="16" bottom="10" left="16"/></padding>
 
-                    <HBox spacing="10" alignment="CENTER_LEFT" styleClass="filter-panel">
-                        <Label text="Поиск по ФИО:"/>
-                        <TextField fx:id="searchUserField" promptText="Введите имя..." prefWidth="250"
-                                   onAction="#onSearchUsers"/>
-                        <Button text="Найти" onAction="#onSearchUsers"/>
-                        <Region HBox.hgrow="ALWAYS"/>
-                        <Button text="Сбросить" onAction="#onResetUserFilters"/>
-                    </HBox>
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Button text="+ Добавить" styleClass="btn-success" onAction="#onAddRequest"/>
+                            <Button text="Редактировать" styleClass="btn-primary" onAction="#onEditRequest"/>
+                            <Button text="Удалить" styleClass="btn-danger" onAction="#onDeleteRequest"/>
+                            <Button text="Изменить статус" styleClass="btn-warning" onAction="#onChangeStatus"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button text="Обновить" onAction="#onRefreshRequests"/>
+                        </HBox>
 
-                    <TableView fx:id="userTable" VBox.vgrow="ALWAYS">
-                        <columns>
-                            <TableColumn fx:id="userIdCol" text="ID" prefWidth="50"/>
-                            <TableColumn fx:id="userNameCol" text="ФИО" prefWidth="250"/>
-                            <TableColumn fx:id="userEmailCol" text="Email" prefWidth="220"/>
-                            <TableColumn fx:id="userPhoneCol" text="Телефон" prefWidth="160"/>
-                            <TableColumn fx:id="userDeptCol" text="Отдел" prefWidth="180"/>
-                            <TableColumn fx:id="userCreatedCol" text="Дата регистрации" prefWidth="160"/>
-                        </columns>
-                        <placeholder>
-                            <Label text="Нет данных для отображения" style="-fx-text-fill: #6c7086;"/>
-                        </placeholder>
-                    </TableView>
-                </VBox>
-            </Tab>
+                        <HBox spacing="10" alignment="CENTER_LEFT" styleClass="filter-panel">
+                            <Label text="Поиск:"/>
+                            <TextField fx:id="searchRequestField" promptText="Название документа..." prefWidth="200"
+                                       onAction="#onSearchRequests"/>
+                            <Button text="Найти" onAction="#onSearchRequests"/>
 
-        </TabPane>
+                            <Separator orientation="VERTICAL"/>
+
+                            <Label text="Статус:"/>
+                            <ComboBox fx:id="filterStatusCombo" prefWidth="150" onAction="#onFilterRequests"/>
+
+                            <Label text="Приоритет:"/>
+                            <ComboBox fx:id="filterPriorityCombo" prefWidth="140" onAction="#onFilterRequests"/>
+
+                            <Separator orientation="VERTICAL"/>
+
+                            <Label text="Сортировка:"/>
+                            <ComboBox fx:id="sortRequestCombo" prefWidth="170" onAction="#onSortRequests"/>
+
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button text="Сбросить" onAction="#onResetRequestFilters"/>
+                        </HBox>
+
+                        <TableView fx:id="requestTable" VBox.vgrow="ALWAYS">
+                            <columns>
+                                <TableColumn fx:id="reqIdCol" text="ID" prefWidth="50"/>
+                                <TableColumn fx:id="reqTitleCol" text="Документ" prefWidth="220"/>
+                                <TableColumn fx:id="reqCategoryCol" text="Категория" prefWidth="130"/>
+                                <TableColumn fx:id="reqStatusCol" text="Статус" prefWidth="120"/>
+                                <TableColumn fx:id="reqPriorityCol" text="Приоритет" prefWidth="110"/>
+                                <TableColumn fx:id="reqUserCol" text="Пользователь" prefWidth="170"/>
+                                <TableColumn fx:id="reqCreatedCol" text="Создан" prefWidth="140"/>
+                                <TableColumn fx:id="reqUpdatedCol" text="Обновлён" prefWidth="140"/>
+                            </columns>
+                            <placeholder>
+                                <Label text="Нет данных для отображения" style="-fx-text-fill: #6c7086;"/>
+                            </placeholder>
+                        </TableView>
+                    </VBox>
+                </Tab>
+
+                <!-- 2. Пользователи -->
+                <Tab text="Пользователи">
+                    <VBox spacing="10">
+                        <padding><Insets top="10" right="16" bottom="10" left="16"/></padding>
+
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Button text="+ Добавить" styleClass="btn-success" onAction="#onAddUser"/>
+                            <Button text="Редактировать" styleClass="btn-primary" onAction="#onEditUser"/>
+                            <Button text="Удалить" styleClass="btn-danger" onAction="#onDeleteUser"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button text="Обновить" onAction="#onRefreshUsers"/>
+                        </HBox>
+
+                        <HBox spacing="10" alignment="CENTER_LEFT" styleClass="filter-panel">
+                            <Label text="Поиск по ФИО:"/>
+                            <TextField fx:id="searchUserField" promptText="Введите имя..." prefWidth="250"
+                                       onAction="#onSearchUsers"/>
+                            <Button text="Найти" onAction="#onSearchUsers"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button text="Сбросить" onAction="#onResetUserFilters"/>
+                        </HBox>
+
+                        <TableView fx:id="userTable" VBox.vgrow="ALWAYS">
+                            <columns>
+                                <TableColumn fx:id="userIdCol" text="ID" prefWidth="50"/>
+                                <TableColumn fx:id="userNameCol" text="ФИО" prefWidth="250"/>
+                                <TableColumn fx:id="userEmailCol" text="Email" prefWidth="220"/>
+                                <TableColumn fx:id="userPhoneCol" text="Телефон" prefWidth="160"/>
+                                <TableColumn fx:id="userDeptCol" text="Отдел" prefWidth="180"/>
+                                <TableColumn fx:id="userCreatedCol" text="Дата регистрации" prefWidth="160"/>
+                            </columns>
+                            <placeholder>
+                                <Label text="Нет данных для отображения" style="-fx-text-fill: #6c7086;"/>
+                            </placeholder>
+                        </TableView>
+                    </VBox>
+                </Tab>
+
+                <!-- 3. Работники (учетные записи сотрудников) -->
+                <Tab text="Работники">
+                    <VBox spacing="10">
+                        <padding><Insets top="10" right="16" bottom="10" left="16"/></padding>
+
+                        <HBox spacing="10" alignment="CENTER_LEFT" styleClass="filter-panel">
+                            <Label text="Поиск работника:"/>
+                            <TextField fx:id="searchWorkerField" promptText="Логин, ФИО или email..." prefWidth="260"
+                                       onAction="#onSearchWorkers"/>
+                            <Button text="Найти" onAction="#onSearchWorkers"/>
+                            <Button text="Сбросить" onAction="#onResetWorkerFilter"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button text="Обновить список" onAction="#onRefreshWorkers"/>
+                        </HBox>
+
+                        <TableView fx:id="workerTable" VBox.vgrow="ALWAYS">
+                            <columns>
+                                <TableColumn fx:id="workerIdCol" text="ID" prefWidth="60"/>
+                                <TableColumn fx:id="workerLoginCol" text="Работник (Логин)" prefWidth="180"/>
+                                <TableColumn fx:id="workerNameCol" text="ФИО" prefWidth="250"/>
+                                <TableColumn fx:id="workerEmailCol" text="Email" prefWidth="220"/>
+                                <TableColumn fx:id="workerRoleCol" text="Роль" prefWidth="130"/>
+                                <TableColumn fx:id="workerCreatedCol" text="Дата регистрации" prefWidth="180"/>
+                            </columns>
+                            <placeholder>
+                                <Label text="Работники не найдены" style="-fx-text-fill: #6c7086;"/>
+                            </placeholder>
+                        </TableView>
+                    </VBox>
+                </Tab>
+
+                <!-- 4. Аудит логов -->
+                <Tab text="Аудит логов">
+                    <VBox spacing="10">
+                        <padding><Insets top="10" right="16" bottom="10" left="16"/></padding>
+
+                        <HBox spacing="10" alignment="CENTER_LEFT" styleClass="filter-panel">
+                            <Label text="Поиск в журнале:"/>
+                            <TextField fx:id="searchAuditField" promptText="Работник или событие..." prefWidth="250"
+                                       onAction="#onSearchAudit"/>
+                            <Button text="Найти" onAction="#onSearchAudit"/>
+                            <Button text="Сбросить" onAction="#onResetAuditFilter"/>
+                            <Region HBox.hgrow="ALWAYS"/>
+                            <Button text="Обновить журнал" onAction="#onRefreshAudit"/>
+                        </HBox>
+
+                        <TableView fx:id="auditTable" VBox.vgrow="ALWAYS">
+                            <columns>
+                                <TableColumn fx:id="auditIdCol" text="ID" prefWidth="60"/>
+                                <TableColumn fx:id="auditTimeCol" text="Дата и время" prefWidth="160"/>
+                                <TableColumn fx:id="auditUserCol" text="Работник" prefWidth="160"/>
+                                <TableColumn fx:id="auditEventCol" text="Событие" prefWidth="160"/>
+                                <TableColumn fx:id="auditEntityCol" text="Сущность" prefWidth="120"/>
+                                <TableColumn fx:id="auditDetailsCol" text="Детали" prefWidth="420"/>
+                            </columns>
+                            <placeholder>
+                                <Label text="Записи аудита отсутствуют" style="-fx-text-fill: #6c7086;"/>
+                            </placeholder>
+                        </TableView>
+                    </VBox>
+                </Tab>
+
+            </TabPane>
+        </StackPane>
     </center>
 
     <bottom>

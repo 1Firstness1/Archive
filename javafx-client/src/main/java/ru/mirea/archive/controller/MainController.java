@@ -12,14 +12,35 @@ import ru.mirea.archive.exception.BusinessException;
 import ru.mirea.archive.exception.DatabaseException;
 import ru.mirea.archive.exception.EntityNotFoundException;
 import ru.mirea.archive.model.DocumentRequest;
+import ru.mirea.archive.model.AuthSession;
 import ru.mirea.archive.model.Priority;
 import ru.mirea.archive.model.RequestStatus;
 import ru.mirea.archive.model.User;
 import ru.mirea.archive.repository.DocumentRequestRepository;
 import ru.mirea.archive.repository.UserRepository;
+import ru.mirea.archive.service.AuthClientService;
 import ru.mirea.archive.service.DocumentRequestService;
 import ru.mirea.archive.service.UserService;
+import ru.mirea.archive.util.DatabaseManager;
 import ru.mirea.archive.util.ExcelExporter;
+
+import javafx.application.Platform;
+import javafx.geometry.Insets;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.PasswordField;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
+import javafx.animation.Animation;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
+import javafx.util.Duration;
+import ru.mirea.archive.model.AuditLogRecord;
+import ru.mirea.archive.model.Worker;
 
 import java.io.File;
 import java.io.IOException;
@@ -31,7 +52,30 @@ public class MainController {
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
+    @FXML private VBox authContainer;
+    @FXML private TabPane authTabPane;
+    @FXML private TextField inlineLoginUsernameField;
+    @FXML private PasswordField inlineLoginPasswordField;
+    @FXML private Button btnInlineLogin;
+    @FXML private TextField inlineRegUsernameField;
+    @FXML private TextField inlineRegFullNameField;
+    @FXML private TextField inlineRegEmailField;
+    @FXML private PasswordField inlineRegPasswordField;
+    @FXML private PasswordField inlineRegConfirmPasswordField;
+    @FXML private Button btnInlineRegister;
+    @FXML private Label inlineAuthStatusLabel;
+
     @FXML private TabPane tabPane;
+
+    @FXML private Label serverStatusBadge;
+    @FXML private Label userStatusLabel;
+    @FXML private Button btnChangePassword;
+    @FXML private Button btnLogout;
+    @FXML private Button btnStatistics;
+    @FXML private Button btnExportXlsx;
+    @FXML private Button btnExportCsv;
+    @FXML private HBox offlineBanner;
+    @FXML private Label offlineBannerLabel;
 
     @FXML private TableView<DocumentRequest> requestTable;
     @FXML private TableColumn<DocumentRequest, String> reqIdCol;
@@ -48,6 +92,15 @@ public class MainController {
     @FXML private ComboBox<String> filterPriorityCombo;
     @FXML private ComboBox<String> sortRequestCombo;
 
+    @FXML private TableView<Worker> workerTable;
+    @FXML private TableColumn<Worker, String> workerIdCol;
+    @FXML private TableColumn<Worker, String> workerLoginCol;
+    @FXML private TableColumn<Worker, String> workerNameCol;
+    @FXML private TableColumn<Worker, String> workerEmailCol;
+    @FXML private TableColumn<Worker, String> workerRoleCol;
+    @FXML private TableColumn<Worker, String> workerCreatedCol;
+    @FXML private TextField searchWorkerField;
+
     @FXML private TableView<User> userTable;
     @FXML private TableColumn<User, String> userIdCol;
     @FXML private TableColumn<User, String> userNameCol;
@@ -58,38 +111,510 @@ public class MainController {
 
     @FXML private TextField searchUserField;
 
+    @FXML private TableView<AuditLogRecord> auditTable;
+    @FXML private TableColumn<AuditLogRecord, String> auditIdCol;
+    @FXML private TableColumn<AuditLogRecord, String> auditTimeCol;
+    @FXML private TableColumn<AuditLogRecord, String> auditUserCol;
+    @FXML private TableColumn<AuditLogRecord, String> auditEventCol;
+    @FXML private TableColumn<AuditLogRecord, String> auditEntityCol;
+    @FXML private TableColumn<AuditLogRecord, String> auditDetailsCol;
+    @FXML private TextField searchAuditField;
+
     @FXML private Label statusLabel;
     @FXML private Label countLabel;
 
     private UserService userService;
     private DocumentRequestService requestService;
+    private final AuthClientService authClientService = new AuthClientService();
+    private AuthClientService.SystemHealth currentHealth;
 
     private ObservableList<DocumentRequest> requestData = FXCollections.observableArrayList();
+    private ObservableList<Worker> workerData = FXCollections.observableArrayList();
+    private List<Worker> fullWorkerList = new java.util.ArrayList<>();
     private ObservableList<User> userData = FXCollections.observableArrayList();
+    private ObservableList<AuditLogRecord> auditData = FXCollections.observableArrayList();
+    private List<AuditLogRecord> fullAuditList = new java.util.ArrayList<>();
 
     @FXML
     public void initialize() {
-        UserRepository userRepo = new UserRepository();
-        DocumentRequestRepository requestRepo = new DocumentRequestRepository();
-        userService = new UserService(userRepo);
-        requestService = new DocumentRequestService(requestRepo, userService);
-
         setupRequestTable();
+        setupWorkerTable();
         setupUserTable();
+        setupAuditTable();
         setupCombos();
-
-        loadRequests();
-        loadUsers();
 
         tabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
             if (newTab != null) {
                 if (newTab.getText().contains("Запросы")) {
                     updateRequestCount();
-                } else {
+                } else if (newTab.getText().contains("Работники")) {
+                    updateWorkerCount();
+                } else if (newTab.getText().contains("Заявители") || newTab.getText().contains("Пользователи")) {
                     updateUserCount();
+                } else if (newTab.getText().contains("Аудит")) {
+                    updateAuditCount();
                 }
             }
         });
+
+        boolean online = checkSystemHealth();
+        setOnlineState(online);
+
+        // Периодическая фоновая проверка состояния сервисов (каждые 4 секунды)
+        Timeline heartbeat = new Timeline(new KeyFrame(Duration.seconds(4), event -> {
+            boolean wasOnline = currentHealth != null && currentHealth.isFullyOnline();
+            boolean isOnline = checkSystemHealth();
+            if (wasOnline != isOnline) {
+                setOnlineState(isOnline);
+            }
+        }));
+        heartbeat.setCycleCount(Animation.INDEFINITE);
+        heartbeat.play();
+    }
+
+    private boolean checkSystemHealth() {
+        currentHealth = authClientService.checkSystemHealth();
+        return currentHealth.isFullyOnline();
+    }
+
+    private void initServices() {
+        if (userService == null) {
+            try {
+                UserRepository userRepo = new UserRepository();
+                DocumentRequestRepository requestRepo = new DocumentRequestRepository();
+                userService = new UserService(userRepo);
+                requestService = new DocumentRequestService(requestRepo, userService);
+            } catch (Exception e) {
+                System.err.println("[MainController] Не удалось инициализировать репозитории: " + e.getMessage());
+            }
+        }
+    }
+
+    private void setOnlineState(boolean online) {
+        if (!online) {
+            if (serverStatusBadge != null) {
+                if (currentHealth != null && currentHealth.isBackendAvailable() && !currentHealth.isDatabaseAvailable()) {
+                    serverStatusBadge.setText("Ошибка БД");
+                } else if (currentHealth != null && !currentHealth.isBackendAvailable() && currentHealth.isDatabaseAvailable()) {
+                    serverStatusBadge.setText("Бэкенд выключен");
+                } else {
+                    serverStatusBadge.setText("Не в сети");
+                }
+                serverStatusBadge.getStyleClass().setAll("status-badge-offline");
+            }
+            if (offlineBanner != null) {
+                offlineBanner.setVisible(true);
+                offlineBanner.setManaged(true);
+            }
+            if (offlineBannerLabel != null && currentHealth != null) {
+                offlineBannerLabel.setText(currentHealth.getMessage());
+            }
+            if (userStatusLabel != null) {
+                userStatusLabel.setText("Сервер недоступен");
+            }
+            if (btnInlineLogin != null) btnInlineLogin.setDisable(true);
+            if (btnInlineRegister != null) btnInlineRegister.setDisable(true);
+            if (tabPane != null) {
+                tabPane.setVisible(false);
+                tabPane.setManaged(false);
+            }
+            if (authContainer != null) {
+                authContainer.setVisible(true);
+                authContainer.setManaged(true);
+            }
+            if (btnStatistics != null) btnStatistics.setDisable(true);
+            if (btnExportXlsx != null) btnExportXlsx.setDisable(true);
+            if (btnExportCsv != null) btnExportCsv.setDisable(true);
+            if (currentHealth != null) {
+                setStatus(currentHealth.getMessage());
+            } else {
+                setStatus("Система не подключена. Запустите docker-compose в папке backend.");
+            }
+        } else {
+            if (serverStatusBadge != null) {
+                serverStatusBadge.setText("В сети");
+                serverStatusBadge.getStyleClass().setAll("status-badge-online");
+            }
+            if (offlineBanner != null) {
+                offlineBanner.setVisible(false);
+                offlineBanner.setManaged(false);
+            }
+            if (btnInlineLogin != null) btnInlineLogin.setDisable(false);
+            if (btnInlineRegister != null) btnInlineRegister.setDisable(false);
+
+            if (AuthSession.getInstance().isAuthenticated()) {
+                updateUserSessionUI();
+            } else {
+                if (userStatusLabel != null) userStatusLabel.setText("Требуется вход");
+                if (tabPane != null) {
+                    tabPane.setVisible(false);
+                    tabPane.setManaged(false);
+                }
+                if (authContainer != null) {
+                    authContainer.setVisible(true);
+                    authContainer.setManaged(true);
+                }
+                if (btnStatistics != null) btnStatistics.setDisable(true);
+                if (btnExportXlsx != null) btnExportXlsx.setDisable(true);
+                if (btnExportCsv != null) btnExportCsv.setDisable(true);
+                setStatus("Сервер доступен. Войдите в систему.");
+            }
+        }
+    }
+
+    @FXML
+    private void onRetryConnection() {
+        boolean online = checkSystemHealth();
+        setOnlineState(online);
+        if (online) {
+            showInfo("Подключение успешно",
+                    "Сервер бэкенда (порт 8080) и база данных PostgreSQL (порт 5432) успешно обнаружены и готовы к работе!");
+        } else {
+            String details = (currentHealth != null)
+                    ? "Результаты проверки компонентов системы:\n\n"
+                    + "• Бэкенд REST API (localhost:8080): " + currentHealth.getBackendDetails() + "\n"
+                    + "• База данных (localhost:5432): " + currentHealth.getDatabaseDetails() + "\n\n"
+                    + "Диагноз: " + currentHealth.getMessage() + "\n\n"
+                    + "Для запуска выполните в терминале:\n"
+                    + "cd backend && docker compose up -d"
+                    : "Не удалось подключиться к REST API (" + authClientService.getBaseUrl() + ") или PostgreSQL.";
+            showError("Сервер недоступен", details);
+        }
+    }
+
+    @FXML
+    private void onInlineLogin() {
+        if (inlineAuthStatusLabel != null) {
+            inlineAuthStatusLabel.setStyle("-fx-text-fill: #f38ba8;");
+        }
+        String username = inlineLoginUsernameField.getText();
+        String password = inlineLoginPasswordField.getText();
+
+        if (username == null || username.isBlank()) {
+            if (inlineAuthStatusLabel != null) inlineAuthStatusLabel.setText("Введите имя пользователя");
+            return;
+        }
+        if (password == null || password.isBlank()) {
+            if (inlineAuthStatusLabel != null) inlineAuthStatusLabel.setText("Введите пароль");
+            return;
+        }
+
+        if (inlineAuthStatusLabel != null) {
+            inlineAuthStatusLabel.setStyle("-fx-text-fill: #89b4fa;");
+            inlineAuthStatusLabel.setText("Авторизация...");
+        }
+
+        AuthClientService.AuthResult res = authClientService.login(username, password);
+        if (res.isSuccess()) {
+            if (inlineAuthStatusLabel != null) inlineAuthStatusLabel.setText("");
+            initServices();
+            updateUserSessionUI();
+            loadRequests();
+            loadWorkers();
+            loadUsers();
+            loadAuditLogs();
+            setStatus("Выполнен вход: " + AuthSession.getInstance().getUsername());
+        } else {
+            if (inlineAuthStatusLabel != null) {
+                inlineAuthStatusLabel.setStyle("-fx-text-fill: #f38ba8;");
+                inlineAuthStatusLabel.setText(res.getMessage());
+            }
+        }
+    }
+
+    @FXML
+    private void onInlineRegister() {
+        if (inlineAuthStatusLabel != null) {
+            inlineAuthStatusLabel.setStyle("-fx-text-fill: #f38ba8;");
+        }
+        String username = inlineRegUsernameField.getText();
+        String fullName = inlineRegFullNameField.getText();
+        String email = inlineRegEmailField.getText();
+        String password = inlineRegPasswordField.getText();
+        String confirm = inlineRegConfirmPasswordField.getText();
+
+        if (username == null || username.trim().length() < 3) {
+            if (inlineAuthStatusLabel != null) inlineAuthStatusLabel.setText("Логин должен содержать минимум 3 символа");
+            return;
+        }
+        if (password == null || password.length() < 4) {
+            if (inlineAuthStatusLabel != null) inlineAuthStatusLabel.setText("Пароль должен содержать минимум 4 символа");
+            return;
+        }
+        if (!password.equals(confirm)) {
+            if (inlineAuthStatusLabel != null) inlineAuthStatusLabel.setText("Пароли не совпадают");
+            return;
+        }
+
+        if (inlineAuthStatusLabel != null) {
+            inlineAuthStatusLabel.setStyle("-fx-text-fill: #89b4fa;");
+            inlineAuthStatusLabel.setText("Регистрация...");
+        }
+
+        AuthClientService.AuthResult res = authClientService.register(username, password, fullName, email);
+        if (res.isSuccess()) {
+            if (inlineAuthStatusLabel != null) inlineAuthStatusLabel.setText("");
+            initServices();
+            updateUserSessionUI();
+            loadRequests();
+            loadWorkers();
+            loadUsers();
+            loadAuditLogs();
+            setStatus("Успешная регистрация и вход: " + AuthSession.getInstance().getUsername());
+        } else {
+            if (inlineAuthStatusLabel != null) {
+                inlineAuthStatusLabel.setStyle("-fx-text-fill: #f38ba8;");
+                inlineAuthStatusLabel.setText(res.getMessage());
+            }
+        }
+    }
+
+    private void updateUserSessionUI() {
+        AuthSession session = AuthSession.getInstance();
+        if (authContainer != null) {
+            authContainer.setVisible(false);
+            authContainer.setManaged(false);
+        }
+        if (tabPane != null) {
+            tabPane.setVisible(true);
+            tabPane.setManaged(true);
+            tabPane.setDisable(false);
+        }
+        if (userStatusLabel != null) {
+            userStatusLabel.setText(session.getUsername() + " (" + session.getFullName() + ")");
+        }
+        if (btnChangePassword != null) {
+            btnChangePassword.setVisible(true);
+            btnChangePassword.setManaged(true);
+        }
+        if (btnLogout != null) {
+            btnLogout.setVisible(true);
+            btnLogout.setManaged(true);
+        }
+        if (btnStatistics != null) btnStatistics.setDisable(false);
+        if (btnExportXlsx != null) btnExportXlsx.setDisable(false);
+        if (btnExportCsv != null) btnExportCsv.setDisable(false);
+    }
+
+    private void setupWorkerTable() {
+        if (workerTable == null) return;
+        workerIdCol.setCellValueFactory(d -> new SimpleStringProperty(String.valueOf(d.getValue().getId())));
+        workerLoginCol.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().getUsername()));
+        workerNameCol.setCellValueFactory(d -> new SimpleStringProperty(
+                d.getValue().getFullName() != null ? d.getValue().getFullName() : "-"));
+        workerEmailCol.setCellValueFactory(d -> new SimpleStringProperty(
+                d.getValue().getEmail() != null ? d.getValue().getEmail() : "-"));
+        workerRoleCol.setCellValueFactory(d -> new SimpleStringProperty(
+                d.getValue().getRole() != null ? d.getValue().getRole() : "USER"));
+        workerCreatedCol.setCellValueFactory(d -> new SimpleStringProperty(
+                d.getValue().getCreatedAt() != null ? d.getValue().getCreatedAt().format(FMT) : "-"));
+
+        workerRoleCol.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String role, boolean empty) {
+                super.updateItem(role, empty);
+                if (empty || role == null) {
+                    setText(null);
+                    setGraphic(null);
+                } else {
+                    Label badge = new Label(role);
+                    badge.getStyleClass().add("badge");
+                    if ("ADMIN".equalsIgnoreCase(role)) {
+                        badge.setStyle("-fx-background-color: rgba(243, 139, 168, 0.25); -fx-text-fill: #f38ba8; -fx-padding: 3 8; -fx-background-radius: 4; -fx-font-weight: bold;");
+                    } else {
+                        badge.setStyle("-fx-background-color: rgba(137, 180, 250, 0.2); -fx-text-fill: #89b4fa; -fx-padding: 3 8; -fx-background-radius: 4;");
+                    }
+                    setGraphic(badge);
+                    setText(null);
+                }
+            }
+        });
+
+        workerTable.setItems(workerData);
+    }
+
+    private void loadWorkers() {
+        try {
+            fullWorkerList = authClientService.fetchWorkers();
+            workerData.setAll(fullWorkerList);
+            updateWorkerCount();
+        } catch (Exception e) {
+            setStatus("Ошибка загрузки работников: " + e.getMessage());
+        }
+    }
+
+    private void updateWorkerCount() {
+        if (countLabel != null) {
+            countLabel.setText("Работников: " + workerData.size());
+        }
+    }
+
+    @FXML
+    private void onSearchWorkers() {
+        String q = searchWorkerField != null ? searchWorkerField.getText() : null;
+        if (q == null || q.isBlank()) {
+            workerData.setAll(fullWorkerList);
+        } else {
+            String lower = q.trim().toLowerCase();
+            List<Worker> filtered = fullWorkerList.stream()
+                    .filter(w -> (w.getUsername() != null && w.getUsername().toLowerCase().contains(lower))
+                            || (w.getFullName() != null && w.getFullName().toLowerCase().contains(lower))
+                            || (w.getEmail() != null && w.getEmail().toLowerCase().contains(lower))
+                            || (w.getRole() != null && w.getRole().toLowerCase().contains(lower)))
+                    .toList();
+            workerData.setAll(filtered);
+        }
+        updateWorkerCount();
+    }
+
+    @FXML
+    private void onResetWorkerFilter() {
+        if (searchWorkerField != null) searchWorkerField.clear();
+        workerData.setAll(fullWorkerList);
+        updateWorkerCount();
+    }
+
+    @FXML
+    private void onRefreshWorkers() {
+        loadWorkers();
+        setStatus("Список работников обновлен");
+    }
+
+    private void setupAuditTable() {
+        if (auditTable == null) return;
+        auditIdCol.setCellValueFactory(d -> new SimpleStringProperty(String.valueOf(d.getValue().getId())));
+        auditTimeCol.setCellValueFactory(d -> new SimpleStringProperty(
+                d.getValue().getCreatedAt() != null ? d.getValue().getCreatedAt().format(FMT) : "-"));
+        auditUserCol.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().getUsername()));
+        auditEventCol.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().getEvent()));
+        auditEntityCol.setCellValueFactory(d -> new SimpleStringProperty(
+                d.getValue().getEntityType() != null ? d.getValue().getEntityType() : "-"));
+        auditDetailsCol.setCellValueFactory(d -> new SimpleStringProperty(
+                d.getValue().getDetails() != null ? d.getValue().getDetails() : "-"));
+
+        auditTable.setItems(auditData);
+    }
+
+    private void loadAuditLogs() {
+        try {
+            fullAuditList = authClientService.fetchAuditLogs();
+            auditData.setAll(fullAuditList);
+            updateAuditCount();
+        } catch (Exception e) {
+            setStatus("Ошибка загрузки журнала аудита: " + e.getMessage());
+        }
+    }
+
+    private void updateAuditCount() {
+        if (countLabel != null) {
+            countLabel.setText("Записей в журнале: " + auditData.size());
+        }
+    }
+
+    @FXML
+    private void onSearchAudit() {
+        String q = searchAuditField.getText();
+        if (q == null || q.isBlank()) {
+            auditData.setAll(fullAuditList);
+        } else {
+            String lower = q.trim().toLowerCase();
+            List<AuditLogRecord> filtered = fullAuditList.stream()
+                    .filter(a -> (a.getUsername() != null && a.getUsername().toLowerCase().contains(lower))
+                            || (a.getEvent() != null && a.getEvent().toLowerCase().contains(lower))
+                            || (a.getDetails() != null && a.getDetails().toLowerCase().contains(lower)))
+                    .toList();
+            auditData.setAll(filtered);
+        }
+        updateAuditCount();
+    }
+
+    @FXML
+    private void onResetAuditFilter() {
+        searchAuditField.clear();
+        auditData.setAll(fullAuditList);
+        updateAuditCount();
+    }
+
+    @FXML
+    private void onRefreshAudit() {
+        loadAuditLogs();
+        setStatus("Журнал аудита обновлён");
+    }
+
+    @FXML
+    private void onChangePasswordDialog() {
+        AuthSession session = AuthSession.getInstance();
+        if (!session.isAuthenticated()) {
+            showError("Ошибка", "Вы не авторизованы");
+            return;
+        }
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Смена пароля");
+        dialog.setHeaderText("Смена пароля для пользователя: " + session.getUsername());
+        dialog.getDialogPane().getStylesheets().add(getClass().getResource("/css/styles.css").toExternalForm());
+
+        ButtonType btnSave = new ButtonType("Сменить пароль", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(btnSave, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 20, 10, 10));
+
+        PasswordField oldPass = new PasswordField();
+        oldPass.setPromptText("Текущий пароль");
+        PasswordField newPass = new PasswordField();
+        newPass.setPromptText("Новый пароль");
+        PasswordField confirmPass = new PasswordField();
+        confirmPass.setPromptText("Повторите новый пароль");
+
+        grid.add(new Label("Старый пароль:"), 0, 0);
+        grid.add(oldPass, 1, 0);
+        grid.add(new Label("Новый пароль:"), 0, 1);
+        grid.add(newPass, 1, 1);
+        grid.add(new Label("Повтор пароля:"), 0, 2);
+        grid.add(confirmPass, 1, 2);
+
+        dialog.getDialogPane().setContent(grid);
+
+        Optional<ButtonType> result = dialog.showAndWait();
+        if (result.isPresent() && result.get() == btnSave) {
+            String oldP = oldPass.getText();
+            String newP = newPass.getText();
+            String confP = confirmPass.getText();
+
+            if (oldP == null || oldP.isBlank()) {
+                showError("Ошибка", "Введите старый пароль");
+                return;
+            }
+            if (newP == null || newP.length() < 4) {
+                showError("Ошибка", "Новый пароль должен содержать минимум 4 символа");
+                return;
+            }
+            if (!newP.equals(confP)) {
+                showError("Ошибка", "Новые пароли не совпадают");
+                return;
+            }
+
+            AuthClientService.AuthResult res = authClientService.changePassword(session.getUsername(), oldP, newP);
+            if (res.isSuccess()) {
+                showInfo("Успешно", "Пароль успешно обновлён в системе!");
+            } else {
+                showError("Ошибка смены пароля", res.getMessage());
+            }
+        }
+    }
+
+    @FXML
+    private void onLogout() {
+        AuthSession.getInstance().clear();
+        setOnlineState(checkSystemHealth());
+        requestData.clear();
+        workerData.clear();
+        userData.clear();
+        auditData.clear();
+        setStatus("Вы вышли из системы.");
     }
 
     private void setupRequestTable() {
@@ -170,6 +695,7 @@ public class MainController {
     }
 
     private void loadRequests() {
+        if (requestService == null) return;
         try {
             List<DocumentRequest> list = requestService.findAll();
             requestData.setAll(list);
@@ -181,6 +707,7 @@ public class MainController {
     }
 
     private void loadUsers() {
+        if (userService == null) return;
         try {
             List<User> list = userService.findAll();
             userData.setAll(list);
