@@ -1,13 +1,19 @@
 package ru.mirea.archive.backend.dto;
 
-public class AuthRequest {
+import jakarta.validation.constraints.NotBlank;
+
+public class LoginRequest {
+
+    @NotBlank(message = "Имя пользователя не должно быть пустым")
     private String username;
+
+    @NotBlank(message = "Пароль не должен быть пустым")
     private String password;
 
-    public AuthRequest() {
+    public LoginRequest() {
     }
 
-    public AuthRequest(String username, String password) {
+    public LoginRequest(String username, String password) {
         this.username = username;
         this.password = password;
     }
@@ -26,15 +32,5 @@ public class AuthRequest {
 
     public void setPassword(String password) {
         this.password = password;
-    }
-
-    public String getLogin() {
-        return username;
-    }
-
-    public void setLogin(String login) {
-        if (this.username == null || this.username.isBlank()) {
-            this.username = login;
-        }
     }
 }

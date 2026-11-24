@@ -1,25 +1,23 @@
 package ru.mirea.archive.backend.dto;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
 public class ChangePasswordRequest {
-    private String username;
+
+    @NotBlank(message = "Текущий пароль обязателен")
     private String oldPassword;
+
+    @NotBlank(message = "Новый пароль обязателен")
+    @Size(min = 6, max = 100, message = "Новый пароль должен содержать от 6 до 100 символов")
     private String newPassword;
 
     public ChangePasswordRequest() {
     }
 
-    public ChangePasswordRequest(String username, String oldPassword, String newPassword) {
-        this.username = username;
+    public ChangePasswordRequest(String oldPassword, String newPassword) {
         this.oldPassword = oldPassword;
         this.newPassword = newPassword;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
     }
 
     public String getOldPassword() {

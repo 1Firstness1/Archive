@@ -1,11 +1,10 @@
-package ru.mirea.archive.backend.model;
+package ru.mirea.archive.backend.domain;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "audit_logs")
-@SuppressWarnings("JpaDataSourceORMInspection")
 public class AuditLog {
 
     @Id
@@ -21,19 +20,27 @@ public class AuditLog {
     @Column(name = "entity_type", length = 100)
     private String entityType;
 
+    @Column(name = "entity_id", length = 100)
+    private String entityId;
+
+    @Column(name = "correlation_id", length = 100)
+    private String correlationId;
+
     @Column(columnDefinition = "TEXT")
     private String details;
 
-    @Column(name = "created_at", nullable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
     public AuditLog() {
     }
 
-    public AuditLog(String username, String event, String entityType, String details) {
-        this.username = username;
+    public AuditLog(String username, String event, String entityType, String entityId, String correlationId, String details) {
+        this.username = username != null ? username : "anonymous";
         this.event = event;
         this.entityType = entityType;
+        this.entityId = entityId;
+        this.correlationId = correlationId;
         this.details = details;
         this.createdAt = LocalDateTime.now();
     }
@@ -68,6 +75,22 @@ public class AuditLog {
 
     public void setEntityType(String entityType) {
         this.entityType = entityType;
+    }
+
+    public String getEntityId() {
+        return entityId;
+    }
+
+    public void setEntityId(String entityId) {
+        this.entityId = entityId;
+    }
+
+    public String getCorrelationId() {
+        return correlationId;
+    }
+
+    public void setCorrelationId(String correlationId) {
+        this.correlationId = correlationId;
     }
 
     public String getDetails() {

@@ -1,89 +1,60 @@
 package ru.mirea.archive.backend.dto;
 
 public class AuthResponse {
-    private boolean success;
-    private String message;
-    private String username;
-    private String fullName;
-    private String email;
-    private String role;
-    private String token;
+    private String accessToken;
+    private String refreshToken;
+    private String tokenType = "Bearer";
+    private long expiresInMs;
+    private UserSummaryDto user;
 
     public AuthResponse() {
     }
 
-    public static AuthResponse success(String username, String fullName, String email, String role, String token) {
-        AuthResponse res = new AuthResponse();
-        res.success = true;
-        res.message = "Авторизация успешна";
-        res.username = username;
-        res.fullName = fullName;
-        res.email = email;
-        res.role = role;
-        res.token = token;
-        return res;
+    public AuthResponse(String accessToken, String refreshToken, long expiresInMs, UserSummaryDto user) {
+        this.accessToken = accessToken;
+        this.refreshToken = refreshToken;
+        this.tokenType = "Bearer";
+        this.expiresInMs = expiresInMs;
+        this.user = user;
     }
 
-    public static AuthResponse error(String message) {
-        AuthResponse res = new AuthResponse();
-        res.success = false;
-        res.message = message;
-        return res;
+    public String getAccessToken() {
+        return accessToken;
     }
 
-    public boolean isSuccess() {
-        return success;
+    public void setAccessToken(String accessToken) {
+        this.accessToken = accessToken;
     }
 
-    public void setSuccess(boolean success) {
-        this.success = success;
+    public String getRefreshToken() {
+        return refreshToken;
     }
 
-    public String getMessage() {
-        return message;
+    public void setRefreshToken(String refreshToken) {
+        this.refreshToken = refreshToken;
     }
 
-    public void setMessage(String message) {
-        this.message = message;
+    public String getTokenType() {
+        return tokenType;
     }
 
-    public String getUsername() {
-        return username;
+    public void setTokenType(String tokenType) {
+        this.tokenType = tokenType;
     }
 
-    public void setUsername(String username) {
-        this.username = username;
+    public long getExpiresInMs() {
+        return expiresInMs;
     }
 
-    public String getFullName() {
-        return fullName;
+    public void setExpiresInMs(long expiresInMs) {
+        this.expiresInMs = expiresInMs;
     }
 
-    public void setFullName(String fullName) {
-        this.fullName = fullName;
+    public UserSummaryDto getUser() {
+        return user;
     }
 
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getRole() {
-        return role;
-    }
-
-    public void setRole(String role) {
-        this.role = role;
-    }
-
-    public String getToken() {
-        return token;
-    }
-
-    public void setToken(String token) {
-        this.token = token;
+    public void setUser(UserSummaryDto user) {
+        this.user = user;
     }
 }

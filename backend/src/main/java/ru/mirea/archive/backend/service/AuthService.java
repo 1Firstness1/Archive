@@ -2,28 +2,36 @@ package ru.mirea.archive.backend.service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.mirea.archive.backend.dto.AuthRequest;
-import ru.mirea.archive.backend.dto.AuthResponse;
-import ru.mirea.archive.backend.dto.ChangePasswordRequest;
-import ru.mirea.archive.backend.dto.RegisterRequest;
-import ru.mirea.archive.backend.model.Account;
+import ru.mirea.archive.backend.domain.Account;
+import ru.mirea.archive.backend.domain.RefreshSession;
+import ru.mirea.archive.backend.domain.Role;
+import ru.mirea.archive.backend.dto.*;
+import ru.mirea.archive.backend.error.BadRequestException;
+import ru.mirea.archive.backend.error.ResourceNotFoundException;
+import ru.mirea.archive.backend.error.UnauthorizedException;
 import ru.mirea.archive.backend.repository.AccountRepository;
+import ru.mirea.archive.backend.repository.RefreshSessionRepository;
+import ru.mirea.archive.backend.security.JwtTokenProvider;
+import ru.mirea.archive.backend.security.LoginAttemptService;
+import ru.mirea.archive.backend.security.UserPrincipal;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.time.LocalDateTime;
 
 @Service
 public class AuthService implements CommandLineRunner {
 
     private final AccountRepository accountRepository;
-    private final ru.mirea.archive.backend.repository.AuditLogRepository auditLogRepository;
+    private final RefreshSessionRepository refreshSessionRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider tokenProvider;
+    private final LoginAttemptService loginAttemptService;
+    private final AuditService auditService;
 
     @Value("${app.init.admin.login:admin}")
     private String initAdminLogin;
@@ -31,160 +39,195 @@ public class AuthService implements CommandLineRunner {
     @Value("${app.init.admin.password:admin123}")
     private String initAdminPassword;
 
-    @Value("${app.init.admin.name:Администратор Архива}")
+    @Value("${app.init.admin.name:Главный Администратор}")
     private String initAdminName;
 
     @Value("${app.init.admin.email:admin@mirea.ru}")
     private String initAdminEmail;
 
-    public AuthService(AccountRepository accountRepository, ru.mirea.archive.backend.repository.AuditLogRepository auditLogRepository) {
+    public AuthService(
+            AccountRepository accountRepository,
+            RefreshSessionRepository refreshSessionRepository,
+            PasswordEncoder passwordEncoder,
+            JwtTokenProvider tokenProvider,
+            LoginAttemptService loginAttemptService,
+            AuditService auditService
+    ) {
         this.accountRepository = accountRepository;
-        this.auditLogRepository = auditLogRepository;
-    }
-
-    public List<ru.mirea.archive.backend.model.AuditLog> getAuditLogs() {
-        return auditLogRepository.findAllByOrderByCreatedAtDesc();
-    }
-
-    public void logEvent(String username, String event, String entityType, String details) {
-        auditLogRepository.save(new ru.mirea.archive.backend.model.AuditLog(
-                username != null ? username : "anonymous",
-                event,
-                entityType,
-                details
-        ));
+        this.refreshSessionRepository = refreshSessionRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.tokenProvider = tokenProvider;
+        this.loginAttemptService = loginAttemptService;
+        this.auditService = auditService;
     }
 
     @Override
+    @Transactional
     public void run(String... args) {
-        // Создаем администратора со стартовыми данными из .env при первом запуске
-        if (!accountRepository.existsByUsername(initAdminLogin)) {
-            String hash = hashPassword(initAdminPassword);
-            Account admin = new Account(
-                    initAdminLogin,
-                    hash,
-                    initAdminName,
-                    initAdminEmail,
-                    "ADMIN"
-            );
-            accountRepository.save(admin);
-            System.out.println("[Backend] Инициализирован стартовый администратор из .env: " + initAdminLogin);
-        }
+        initOrUpdateAccount(initAdminLogin, initAdminPassword, initAdminName, initAdminEmail, Role.ADMIN);
+        initOrUpdateAccount("editor", "editor123", "Старший Архивариус", "editor@mirea.ru", Role.EDITOR);
+        initOrUpdateAccount("viewer", "viewer123", "Читатель Архива", "viewer@mirea.ru", Role.VIEWER);
     }
 
-    public AuthResponse login(AuthRequest request) {
-        if (request.getUsername() == null || request.getUsername().isBlank()) {
-            return AuthResponse.error("Логин не может быть пустым");
-        }
-        if (request.getPassword() == null || request.getPassword().isBlank()) {
-            return AuthResponse.error("Пароль не может быть пустым");
-        }
-
-        Optional<Account> accountOpt = accountRepository.findByUsername(request.getUsername().trim());
-        if (accountOpt.isEmpty()) {
-            return AuthResponse.error("Пользователь не найден");
-        }
-
-        Account account = accountOpt.get();
-        String expectedHash = account.getPasswordHash();
-        String actualHash = hashPassword(request.getPassword());
-
-        if (!expectedHash.equals(actualHash)) {
-            logEvent(request.getUsername(), "LOGIN_FAILED", "AUTH", "Неверный пароль или логин");
-            return AuthResponse.error("Неверный пароль");
-        }
-
-        String token = UUID.randomUUID().toString();
-        logEvent(account.getUsername(), "LOGIN", "AUTH", "Успешная авторизация в системе");
-        return AuthResponse.success(
-                account.getUsername(),
-                account.getFullName(),
-                account.getEmail(),
-                account.getRole(),
-                token
+    private void initOrUpdateAccount(String username, String rawPassword, String fullName, String email, Role role) {
+        accountRepository.findByUsername(username).ifPresentOrElse(
+                account -> {
+                    if (!passwordEncoder.matches(rawPassword, account.getPasswordHash())) {
+                        account.setPasswordHash(passwordEncoder.encode(rawPassword));
+                        account.setActive(true);
+                        account.setMustChangePassword(false);
+                        accountRepository.save(account);
+                    }
+                },
+                () -> {
+                    Account account = new Account(username, passwordEncoder.encode(rawPassword), fullName, email, role);
+                    account.setActive(true);
+                    account.setMustChangePassword(false);
+                    accountRepository.save(account);
+                    auditService.log("system", "SYSTEM_INIT", "ACCOUNT", account.getUsername(),
+                            "Инициализирован пользователь по умолчанию: " + account.getUsername());
+                }
         );
     }
 
     @Transactional
-    public AuthResponse register(RegisterRequest request) {
-        if (request.getUsername() == null || request.getUsername().trim().length() < 3) {
-            return AuthResponse.error("Логин должен содержать не менее 3 символов");
-        }
-        if (request.getPassword() == null || request.getPassword().length() < 4) {
-            return AuthResponse.error("Пароль должен содержать не менее 4 символов");
-        }
-
+    public AuthResponse login(LoginRequest request, String userAgent, String ipAddress) {
         String username = request.getUsername().trim();
-        if (accountRepository.existsByUsername(username)) {
-            return AuthResponse.error("Пользователь с логином '" + username + "' уже существует");
+        Account account = accountRepository.findByUsername(username)
+                .orElse(null);
+
+        if (account == null) {
+            auditService.log(username, "LOGIN_FAILED", "AUTH", null, "Пользователь не найден");
+            throw new BadCredentialsException("Неверный логин или пароль");
         }
 
-        String email = request.getEmail() != null ? request.getEmail().trim() : "";
-        if (!email.isBlank() && accountRepository.existsByEmail(email)) {
-            return AuthResponse.error("Email '" + email + "' уже используется");
+        if (!account.isActive()) {
+            auditService.log(username, "LOGIN_BLOCKED", "AUTH", account.getId().toString(), "Попытка входа в отключенную учетную запись");
+            throw new DisabledException("Учетная запись отключена");
         }
 
-        String fullName = request.getFullName() != null && !request.getFullName().isBlank()
-                ? request.getFullName().trim() : username;
+        if (loginAttemptService.isLocked(account)) {
+            auditService.log(username, "LOGIN_LOCKED", "AUTH", account.getId().toString(), "Попытка входа во временно заблокированную учетную запись");
+            throw new LockedException("Учетная запись временно заблокирована из-за превышения числа неудачных попыток");
+        }
 
-        String hash = hashPassword(request.getPassword());
-        Account account = new Account(username, hash, fullName, email, "USER");
-        accountRepository.save(account);
+        if (!passwordEncoder.matches(request.getPassword(), account.getPasswordHash())) {
+            loginAttemptService.loginFailed(username);
+            auditService.log(username, "LOGIN_FAILED", "AUTH", account.getId().toString(), "Неверный пароль");
+            throw new BadCredentialsException("Неверный логин или пароль");
+        }
 
-        String token = UUID.randomUUID().toString();
-        logEvent(account.getUsername(), "REGISTER", "AUTH", "Регистрация нового пользователя: " + account.getFullName());
-        return AuthResponse.success(
+        loginAttemptService.loginSucceeded(username);
+
+        UserPrincipal principal = new UserPrincipal(account);
+        String accessToken = tokenProvider.generateAccessToken(principal);
+        String rawRefreshToken = tokenProvider.generateRefreshTokenString();
+        String tokenHash = tokenProvider.hashToken(rawRefreshToken);
+
+        LocalDateTime expiresAt = LocalDateTime.now().plusNanos(tokenProvider.getRefreshExpirationMs() * 1_000_000);
+        RefreshSession session = new RefreshSession(account, tokenHash, expiresAt, userAgent, ipAddress);
+        refreshSessionRepository.save(session);
+
+        auditService.log(username, "LOGIN_SUCCESS", "AUTH", account.getId().toString(), "Успешная авторизация в системе");
+
+        UserSummaryDto userSummary = new UserSummaryDto(
+                account.getId(),
                 account.getUsername(),
                 account.getFullName(),
                 account.getEmail(),
                 account.getRole(),
-                token
+                account.isMustChangePassword()
         );
+
+        return new AuthResponse(accessToken, rawRefreshToken, tokenProvider.getAccessExpirationMs(), userSummary);
     }
 
     @Transactional
-    public AuthResponse changePassword(ChangePasswordRequest request) {
-        if (request.getUsername() == null || request.getUsername().isBlank()) {
-            return AuthResponse.error("Укажите имя пользователя");
-        }
-        if (request.getOldPassword() == null || request.getOldPassword().isBlank()) {
-            return AuthResponse.error("Введите старый пароль");
-        }
-        if (request.getNewPassword() == null || request.getNewPassword().length() < 4) {
-            return AuthResponse.error("Новый пароль должен содержать минимум 4 символа");
+    public AuthResponse refresh(String rawRefreshToken, String userAgent, String ipAddress) {
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            throw new BadRequestException("Refresh token обязателен");
         }
 
-        Optional<Account> accountOpt = accountRepository.findByUsername(request.getUsername().trim());
-        if (accountOpt.isEmpty()) {
-            return AuthResponse.error("Пользователь не найден");
+        String tokenHash = tokenProvider.hashToken(rawRefreshToken.trim());
+        RefreshSession session = refreshSessionRepository.findByTokenHash(tokenHash)
+                .orElseThrow(() -> new UnauthorizedException("Недействительная refresh-сессия"));
+
+        if (!session.isValid()) {
+            throw new UnauthorizedException("Refresh-сессия истекла или отозвана");
         }
 
-        Account account = accountOpt.get();
-        String currentHash = hashPassword(request.getOldPassword());
-        if (!account.getPasswordHash().equals(currentHash)) {
-            logEvent(account.getUsername(), "PASSWORD_CHANGE_FAILED", "AUTH", "Попытка смены пароля: неверный старый пароль");
-            return AuthResponse.error("Старый пароль указан неверно");
+        Account account = session.getAccount();
+        if (!account.isActive()) {
+            throw new DisabledException("Учетная запись отключена");
         }
 
-        account.setPasswordHash(hashPassword(request.getNewPassword()));
-        accountRepository.save(account);
+        // Ротация refresh-токена: отзываем старый, создаем новый
+        session.setRevoked(true);
+        refreshSessionRepository.save(session);
 
-        logEvent(account.getUsername(), "PASSWORD_CHANGE", "AUTH", "Пароль успешно обновлен пользователем");
+        UserPrincipal principal = new UserPrincipal(account);
+        String newAccessToken = tokenProvider.generateAccessToken(principal);
+        String newRawRefreshToken = tokenProvider.generateRefreshTokenString();
+        String newTokenHash = tokenProvider.hashToken(newRawRefreshToken);
 
-        AuthResponse res = new AuthResponse();
-        res.setSuccess(true);
-        res.setMessage("Пароль успешно изменён");
-        res.setUsername(account.getUsername());
-        return res;
+        LocalDateTime expiresAt = LocalDateTime.now().plusNanos(tokenProvider.getRefreshExpirationMs() * 1_000_000);
+        RefreshSession newSession = new RefreshSession(account, newTokenHash, expiresAt, userAgent, ipAddress);
+        refreshSessionRepository.save(newSession);
+
+        auditService.log(account.getUsername(), "TOKEN_REFRESH", "AUTH", account.getId().toString(), "Обновление access токена по refresh сессии");
+
+        UserSummaryDto userSummary = new UserSummaryDto(
+                account.getId(),
+                account.getUsername(),
+                account.getFullName(),
+                account.getEmail(),
+                account.getRole(),
+                account.isMustChangePassword()
+        );
+
+        return new AuthResponse(newAccessToken, newRawRefreshToken, tokenProvider.getAccessExpirationMs(), userSummary);
     }
 
-    private String hashPassword(String password) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(password.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 algorithm not available", e);
+    @Transactional
+    public void logout(String rawRefreshToken, String currentUsername) {
+        if (rawRefreshToken != null && !rawRefreshToken.isBlank()) {
+            String tokenHash = tokenProvider.hashToken(rawRefreshToken.trim());
+            refreshSessionRepository.revokeByTokenHash(tokenHash);
         }
+        auditService.log(currentUsername, "LOGOUT", "AUTH", null, "Выход из системы");
+    }
+
+    @Transactional
+    public void changePassword(ChangePasswordRequest request, String currentUsername) {
+        Account account = accountRepository.findByUsername(currentUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден: " + currentUsername));
+
+        if (!passwordEncoder.matches(request.getOldPassword(), account.getPasswordHash())) {
+            auditService.log(currentUsername, "PASSWORD_CHANGE_FAILED", "ACCOUNT", account.getId().toString(), "Неверный старый пароль");
+            throw new BadRequestException("Текущий пароль указан неверно");
+        }
+
+        account.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        account.setMustChangePassword(false);
+        accountRepository.save(account);
+
+        // Отзываем все предыдущие refresh-сессии пользователя для безопасности
+        refreshSessionRepository.revokeAllByAccountId(account.getId());
+
+        auditService.log(currentUsername, "PASSWORD_CHANGED", "ACCOUNT", account.getId().toString(), "Пароль успешно изменён");
+    }
+
+    @Transactional(readOnly = true)
+    public UserSummaryDto getMe(String currentUsername) {
+        Account account = accountRepository.findByUsername(currentUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("Пользователь не найден: " + currentUsername));
+        return new UserSummaryDto(
+                account.getId(),
+                account.getUsername(),
+                account.getFullName(),
+                account.getEmail(),
+                account.getRole(),
+                account.isMustChangePassword()
+        );
     }
 }

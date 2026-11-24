@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: archive_postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-archive_db}
+      POSTGRES_USER: ${DB_USER:-artem}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-1234}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-artem} -d ${DB_NAME:-archive_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: archive_backend
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-archive_db}
+      DB_USER: ${DB_USER:-artem}
+      DB_PASSWORD: ${DB_PASSWORD:-1234}
+      SERVER_PORT: 8080
+      JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      JWT_ACCESS_EXPIRATION_MS: ${JWT_ACCESS_EXPIRATION_MS:-900000}
+      JWT_REFRESH_EXPIRATION_MS: ${JWT_REFRESH_EXPIRATION_MS:-604800000}
+      INIT_ADMIN_LOGIN: ${INIT_ADMIN_LOGIN:-admin}
+      INIT_ADMIN_PASSWORD: ${INIT_ADMIN_PASSWORD:-admin123}
+      INIT_ADMIN_NAME: ${INIT_ADMIN_NAME:-Главный Администратор}
+      INIT_ADMIN_EMAIL: ${INIT_ADMIN_EMAIL:-admin@mirea.ru}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:8080,http://127.0.0.1:3000,http://127.0.0.1:5173,http://127.0.0.1:8080}
+    ports:
+      - "127.0.0.1:${SERVER_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: archive_postgres_data

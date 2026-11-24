@@ -1,25 +1,25 @@
 package ru.mirea.archive.backend.dto;
 
-import java.time.LocalDateTime;
+import ru.mirea.archive.backend.domain.Role;
 
-public class WorkerDto {
+public class UserSummaryDto {
     private Long id;
     private String username;
     private String fullName;
     private String email;
-    private String role;
-    private LocalDateTime createdAt;
+    private Role role;
+    private boolean mustChangePassword;
 
-    public WorkerDto() {
+    public UserSummaryDto() {
     }
 
-    public WorkerDto(Long id, String username, String fullName, String email, String role, LocalDateTime createdAt) {
+    public UserSummaryDto(Long id, String username, String fullName, String email, Role role, boolean mustChangePassword) {
         this.id = id;
         this.username = username;
         this.fullName = fullName;
         this.email = email;
         this.role = role;
-        this.createdAt = createdAt;
+        this.mustChangePassword = mustChangePassword;
     }
 
     public Long getId() {
@@ -54,19 +54,19 @@ public class WorkerDto {
         this.email = email;
     }
 
-    public String getRole() {
+    public Role getRole() {
         return role;
     }
 
-    public void setRole(String role) {
+    public void setRole(Role role) {
         this.role = role;
     }
 
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
+    public boolean isMustChangePassword() {
+        return mustChangePassword;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
+    public void setMustChangePassword(boolean mustChangePassword) {
+        this.mustChangePassword = mustChangePassword;
     }
 }

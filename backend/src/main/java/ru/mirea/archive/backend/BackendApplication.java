@@ -19,6 +19,7 @@ public class BackendApplication {
     private static void loadDotenv() {
         File[] candidates = new File[]{
                 new File(".env"),
+                new File("../.env"),
                 new File("backend/.env"),
                 new File("../backend/.env")
         };
